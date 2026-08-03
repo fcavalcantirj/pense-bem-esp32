@@ -21,8 +21,9 @@ fly into.</sub></p>
 
 ### See it running
 
-- **[Boot + code entry](https://drive.google.com/file/d/1ibkhmrhZjWPmG_aU1f9fXT4cUaFk4v45/preview)**
-- **[Answering from a real printed book](https://drive.google.com/file/d/15JBqlwcrhhBKz7v20fLi9zfxgVIpkNsA/preview)**
+- **[Playing it](https://drive.google.com/file/d/1xkHbjNFMxeBf9py2WNtwjVqcgYjH4kDP/preview)** — code entry, a question, an answer
+- **[The boot animation](https://drive.google.com/file/d/15JBqlwcrhhBKz7v20fLi9zfxgVIpkNsA/preview)** — particles assembling into the title
+- **[An over-the-air fix landing](https://drive.google.com/file/d/1ibkhmrhZjWPmG_aU1f9fXT4cUaFk4v45/preview)** — a rendering bug caught on camera, fixed, and reflashed without touching the board
 
 ```
 ┌──────────────────────────────────────────────┐
