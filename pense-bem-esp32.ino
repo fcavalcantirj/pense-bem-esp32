@@ -239,6 +239,30 @@ static void centreFit(const char *s, int y, int maxW)
     small();  centre(s, y);
 }
 
+/* ⚠ TWO HINTS AT THE SAME y CAN COLLIDE, AND centreFit() DOES NOT PROTECT THEM
+   — neither one is centred. Shipped exactly that way: the standby row rendered
+   "< OK comecisegure = som >" because "< OK comeca" and "segure = som >" ran into
+   each other in the middle. Invisible to every test; obvious on video.
+
+   So the same treatment as centreFit: MEASURE, then step down a face until the
+   pair fits with a gap. A long hint shrinks instead of eating its neighbour.
+   ⚠ The fallback is built-in font 1, which IS ASCII — fonts 6/7/8 are
+   digit/clock faces and would render letters as garbage. */
+static void drawHints(const char *l, const char *r, int y)
+{
+    const int GAP = 8;
+
+    small();
+    if (tft.textWidth(l) + tft.textWidth(r) + GAP > W) {
+        tft.setFreeFont(NULL);
+        tft.setTextFont(1);
+        tft.setTextSize(1);
+    }
+    tft.setTextDatum(TL_DATUM); tft.drawString(l, 6, y);
+    tft.setTextDatum(TR_DATUM); tft.drawString(r, W - 6, y);
+    small();
+}
+
 static const char *BANDS[4] = { "OTIMO", "MUITO BEM", "QUASE LA", "TENTE MAIS" };
 
 // ---- screens ---------------------------------------------------------------
@@ -249,15 +273,14 @@ static void drawStandby()
     tft.setTextColor(C_TEXT, C_BG);
     centreFit("PENSE BEM", 20, W - 8);
     small();  tft.setTextColor(C_SEL, C_BG);
-    centre("OK  PARA COMECAR", 78);
+    centreFit("OK PARA COMECAR", 76, W - 8);
     /* ⚠ State first, then the verb. The old wording ("SELECT segurado = som OFF")
        read as a DESCRIPTION OF THE GESTURE rather than the current setting, which
        is ambiguous in the one moment it matters: silence with no explanation. */
     tft.setTextColor(muted ? C_WRONG : C_DIM, C_BG);
-    centre(muted ? "SOM DESLIGADO" : "SOM LIGADO", 100);
-    small(); tft.setTextColor(C_DIM, C_BG);
-    tft.setTextDatum(TL_DATUM); tft.drawString("< OK comeca", 6, H - 20);
-    tft.setTextDatum(TR_DATUM); tft.drawString("segure = som >", W - 6, H - 20);
+    centreFit(muted ? "SOM DESLIGADO" : "SOM LIGADO", 98, W - 8);
+    tft.setTextColor(C_DIM, C_BG);
+    drawHints("< OK", "segure = som >", H - 18);
     if (lastScore >= 0) {
         char buf[40];
         snprintf(buf, sizeof(buf), "ultimo  L%02d S%d  %d pts", lastBook, lastSection, lastScore);
@@ -293,10 +316,9 @@ static void drawCode()
             tft.setTextDatum(TC_DATUM); tft.drawString("-", x, 40);
         }
     }
-    small(); tft.setTextColor(C_DIM, C_BG);
-    tft.setTextDatum(TL_DATUM);
-    tft.drawString(valAt(pos, digits[pos]) == '<' ? "< OK apaga" : "< OK confirma", 6, H - 20);
-    tft.setTextDatum(TR_DATUM); tft.drawString("muda >", W - 6, H - 20);
+    tft.setTextColor(C_DIM, C_BG);
+    drawHints(valAt(pos, digits[pos]) == '<' ? "< OK apaga" : "< OK confirma",
+              "muda >", H - 20);
 }
 
 static void drawBad()
@@ -347,9 +369,8 @@ static void drawQuestion()
         tft.setTextDatum(TC_DATUM);
         tft.drawString(c, x + w / 2, y + 6);
     }
-    small(); tft.setTextColor(C_DIM, C_BG);
-    tft.setTextDatum(TL_DATUM); tft.drawString("< OK responde", 6, H - 18);
-    tft.setTextDatum(TR_DATUM); tft.drawString("troca >", W - 6, H - 18);
+    tft.setTextColor(C_DIM, C_BG);
+    drawHints("< OK responde", "troca >", H - 18);
 }
 
 static void drawJudge()
