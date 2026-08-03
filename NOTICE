@@ -1,0 +1,19 @@
+Pense Bem answer-generation constants and algorithm are ported from the
+Beerware-licensed reverse-engineering work in lpereira/Pense-Bem and
+ehabkost/pensebem. The notice below is retained VERBATIM and is not paraphrased:
+"this stuff" is precisely the two seed constants in pensebem.h, which ARE the
+reverse-engineering work the licence covers.
+
+----------------------------------------------------------------------------
+"THE BEER-WARE LICENSE" (Revision 42):
+<leandro@tia.mat.br> and <juca@members.fsf.org> wrote this file. As long as
+you retain this notice you can do whatever you want with this stuff.  If we
+meet some day, and you think this stuff is worth it, you can buy us a beer
+in return.
+----------------------------------------------------------------------------
+
+Upstream snapshots (see formula-test/fixtures/SOURCE.md):
+  lpereira/Pense-Bem  02ccba6aa82019e74960bc2fb0ed39773747b5da
+  ehabkost/pensebem   f6c8b4cc8f240d03da7176aec4cefd62b7ee44f8
+
+"Pense Bem" is a Tectoy trademark. This is a personal, non-distributed build.

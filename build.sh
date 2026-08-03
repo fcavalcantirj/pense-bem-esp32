@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# build.sh — compile / flash the Pense Bem sketch for the LilyGO T-Display V1.1.
+#
+#   ./build.sh              host tests + compile
+#   ./build.sh flash        + upload over USB   (⚠ do the FIRST flash this way)
+#   ./build.sh ota          + upload over WiFi
+#
+# ⚠ TFT_eSPI PICKS ITS DISPLAY FROM ONE GLOBAL FILE PER LIBRARY COPY
+#   (User_Setup_Select.h). This sketch needs Setup25 (T-Display V1.1). If you also
+#   build for a T-Display-S3 (Setup206) on the same machine, give ONE of them an
+#   isolated sketchbook via ARDUINO_DIRECTORIES_USER or they will fight and one
+#   will render garbage. ⚠ Never run a blind `arduino-cli lib upgrade` either:
+#   it resets User_Setup_Select.h to the default.
+set -euo pipefail
+cd "$(dirname "$0")"
+
+FQBN="esp32:esp32:esp32"
+PINNED="3.3.10"
+
+# ⚠ THE CORE IS PINNED AND THIS REFUSES TO BUILD OTHERWISE. A bare
+#   `core install esp32:esp32` drifts to latest, and a toolchain that moves under
+#   you turns a working board into a mystery. Three lines, and they are the
+#   difference between a reproducible build and an afternoon.
+arduino-cli core list 2>/dev/null | grep -qE "^esp32:esp32[[:space:]]+$PINNED" \
+  || { echo "esp32 core is not pinned at $PINNED — run: arduino-cli core install esp32:esp32@$PINNED"; exit 1; }
+
+[ -f secrets.h ] || { echo "secrets.h missing — cp secrets.h.example secrets.h and fill it in"; exit 1; }
+
+# The host suites gate the build. They are ~90% of the correctness risk and cost
+# nothing, so there is no reason to ever flash past a red one.
+bash formula-test/run.sh
+echo
+bash game-test/run.sh
+echo
+
+arduino-cli compile --fqbn "$FQBN" .
+
+case "${1:-}" in
+  flash)
+    # ⚠ usbserial, not usbmodem — the V1.1 is a CH9102 bridge, not native USB.
+    # ⚠ 115200, NOT the 921600 default: it chokes mid-write on this unit.
+    # ⚠ A charge-only USB-C cable gives a dark screen AND no port. Suspect the
+    #   cable before the board — this wastes more time than any other mistake here.
+    PORT=$(ls /dev/cu.usbserial* 2>/dev/null | head -1)
+    [ -n "$PORT" ] || { echo "no /dev/cu.usbserial* port — cable?"; exit 1; }
+    arduino-cli upload -p "$PORT" --fqbn "${FQBN}:UploadSpeed=115200" .
+    ;;
+  ota)
+    # ⚠ `-l network` IS REQUIRED and the target must be the RESOLVED IP. Without
+    #   it arduino-cli treats the argument as a SERIAL port and dies with a
+    #   message that reads exactly like the board is unreachable while it sits
+    #   there answering pings. Hit for real on the S3 on 2026-08-01.
+    OTA_PASS=$(awk '/#define OTA_PASS/ {gsub(/"/,"",$3); print $3}' secrets.h)
+    IP=$(ping -c 1 -W 2000 esp32-pense-bem.local 2>/dev/null | awk -F'[()]' '/PING/ {print $2; exit}')
+    [ -n "$IP" ] || { echo "esp32-pense-bem.local did not resolve — board offline?"; exit 1; }
+    echo "OTA -> $IP"
+    arduino-cli upload -p "$IP" -l network --fqbn "$FQBN" --upload-field password="$OTA_PASS" .
+    ;;
+  "") ;;
+  *) echo "usage: $0 [flash|ota]"; exit 2 ;;
+esac

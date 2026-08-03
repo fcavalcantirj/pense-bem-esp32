@@ -1,0 +1,10 @@
+# firmware secrets — WiFi credentials and the OTA password
+secrets.h
+
+# build artifacts
+build/
+formula-test/pb-formula
+game-test/pb-game
+
+# macOS
+.DS_Store
