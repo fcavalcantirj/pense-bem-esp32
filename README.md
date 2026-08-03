@@ -64,11 +64,20 @@ That budget is a compile-time assertion.
 
 ## Hardware
 
-| | |
-|---|---|
-| **Board** | LilyGO TTGO **T-Display V1.1** (ESP32, 240×135 ST7789V, two buttons) |
-| **Buzzer** *(optional)* | passive buzzer, `GPIO21` + `GND` — two wires |
-| **Everything else** | nothing. The board is the whole toy. |
+| | | where |
+|---|---|---|
+| **Board** | LilyGO TTGO **T-Display V1.1** — ESP32, 1.14" 240×135 ST7789V IPS, two buttons, USB-C, JST LiPo connector + charger | [official page](https://lilygo.cc/en-us/products/t-display) · [AliExpress](https://pt.aliexpress.com/w/wholesale-lilygo-t-display-v1.1.html) |
+| **Passive buzzer** *(optional)* | two wires: `GPIO21` and `GND` | any passive/piezo buzzer |
+| **Everything else** | nothing. The board is the whole toy. | |
+
+Roughly US$12–18 for the board. Nothing else is required — no breadboard, no
+level shifters, no soldering. The screen, both buttons and the battery charger
+are already on it, which is most of why this board was chosen over a bare ESP32
+plus a separate display.
+
+⚠ **Get the V1.1, not the T-Display-S3.** They look similar and are not
+interchangeable here: the S3 drives its panel over an 8-bit parallel bus and
+needs a different TFT_eSPI setup (Setup206 vs **Setup25**) and a different FQBN.
 
 `SELECT` is the **right** button, `OK` is the **left** one. Every on-screen hint
 is drawn on the *side* of the button it refers to, because a board with two
