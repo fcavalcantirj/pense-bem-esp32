@@ -135,6 +135,7 @@ access point down.
 | `pbgame.h` | **the session rules** — scoring, retries, advance, banding. |
 | `pense-bem-esp32.ino` | buttons and pixels. Owns no rules. |
 | `INSTALL.md` · `AGENTS.md` | setup, for humans and for coding agents |
+| [`docs/HOW-THIS-WAS-BUILT.md`](docs/HOW-THIS-WAS-BUILT.md) | the 37 prompts that built this, and the eleven bugs — six of which no test could see |
 | `formula-test/` | 7-stage host proof of the formula and the port |
 | `game-test/` | host proof of the rules, written test-first |
 

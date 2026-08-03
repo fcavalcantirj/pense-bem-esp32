@@ -237,12 +237,25 @@ static void huge()   { tft.setFreeFont(&FreeSansBold24pt7b); }
 
    Same family as the font-6 scar this board already carries: the failure is
    silent and only glass shows it. */
-static void centreFit(const char *s, int y, int maxW)
+/* ⚠ TIER IS A CEILING, AND OMITTING IT WAS A BUG. centreFit picks the LARGEST
+   face that fits the WIDTH — correct for a title, wrong for everything else.
+   "SOM LIGADO" is short, so it fitted at 24pt, rendered ~34px tall, and ran
+   straight through the hint row below it. Nothing is layered on this panel;
+   what actually has to hold is a VERTICAL BUDGET, and width-fitting alone
+   cannot enforce one.
+
+   T_TITLE 24pt (~34px) · T_BIG 18pt (~26px) · T_MED 12pt (~18px) · T_SMALL 9pt (~13px) */
+#define T_TITLE 0
+#define T_BIG   1
+#define T_MED   2
+#define T_SMALL 3
+
+static void centreFit(const char *s, int y, int maxW, int tier)
 {
-    huge();   if (tft.textWidth(s) <= maxW) { centre(s, y); return; }
-    large();  if (tft.textWidth(s) <= maxW) { centre(s, y); return; }
-    medium(); if (tft.textWidth(s) <= maxW) { centre(s, y); return; }
-    small();  centre(s, y);
+    if (tier <= T_TITLE) { huge();   if (tft.textWidth(s) <= maxW) { centre(s, y); return; } }
+    if (tier <= T_BIG)   { large();  if (tft.textWidth(s) <= maxW) { centre(s, y); return; } }
+    if (tier <= T_MED)   { medium(); if (tft.textWidth(s) <= maxW) { centre(s, y); return; } }
+    small(); centre(s, y);
 }
 
 /* ⚠ TWO HINTS AT THE SAME y CAN COLLIDE, AND centreFit() DOES NOT PROTECT THEM
@@ -283,9 +296,22 @@ static const char *BANDS[4] = { "OTIMO", "MUITO BEM", "QUASE LA", "TENTE MAIS" }
 //   power-on: OK is GPIO0, and holding it through reset puts the ESP32 into USB
 //   download mode instead of running this firmware at all.
 
+/* ⚠ SKIP MEANS "PRESSED DURING", NOT "IS DOWN". The first version aborted the
+   moment GPIO0 read LOW — so a finger resting on the left button, or a button
+   still down from the reset, cancelled the whole animation instantly and the
+   board appeared to jump straight to standby. Latch the initial state and only
+   treat a HIGH->LOW transition as intent. */
+static bool splashArmed;      /* true once OK has been seen released */
+
 static bool splashSkip()
 {
-    return digitalRead(PIN_OK) == LOW;
+    bool down = (digitalRead(PIN_OK) == LOW);
+
+    if (!splashArmed) {
+        if (!down) { splashArmed = true; }   /* released -> a press now counts */
+        return false;
+    }
+    return down;
 }
 
 /* Sleeps while keeping sound alive; returns true if the user asked to skip. */
@@ -300,77 +326,164 @@ static bool splashWait(uint32_t ms)
     return false;
 }
 
+/* PARTICLE ASSEMBLE — dust converges into the title, the way the LilyGO demo
+   assembles a face. Our flavour: the letters are the attractor.
+ *
+ * HOW: render the title once into an off-screen sprite, harvest the coordinates
+ * of its lit pixels as TARGETS, scatter that many particles at random, then ease
+ * each one toward its target. No font metrics are hard-coded and no positions
+ * are guessed — the shape IS the rendered text, so this cannot drift out of
+ * alignment with what the standby screen draws.
+ *
+ * ⚠ That is also why v1 and v2 were thrown away. Both positioned elements from
+ *   independent constants and collided. Here there is exactly one shape, and it
+ *   is derived from the thing it depicts.
+ *
+ * COST: the sprite is freed before the animation runs. Particles are int16 fixed
+ * point (4 fractional bits) — no float, no allocation in the loop. Each frame
+ * writes 2 pixels per particle (erase old, draw new) rather than repainting the
+ * screen, which is what keeps it smooth over SPI. */
+
+#define PB_MAXP 900
+
+static int16_t pTx[PB_MAXP], pTy[PB_MAXP];   /* target, whole pixels   */
+static int16_t pX[PB_MAXP],  pY[PB_MAXP];    /* current, <<4 fixed pt  */
+static uint16_t pC[PB_MAXP];                 /* per-particle shade     */
+static int pN;
+
+static const uint16_t DUST[] = { 0xFFFF, 0xCE7F, 0x9CDF, 0x6B7F };
+
+/* Harvest lit pixels of the title into the target arrays. */
+static void splashBuildTargets()
+{
+    const char *TITLE = "PENSE BEM";
+    const int SH = 46;                         /* sprite height */
+    TFT_eSprite spr = TFT_eSprite(&tft);
+    int x, y, step, lit = 0;
+
+    pN = 0;
+    spr.setColorDepth(8);
+    if (!spr.createSprite(W, SH)) { return; }  /* out of RAM -> pN stays 0 */
+    spr.fillSprite(TFT_BLACK);
+    spr.setTextColor(TFT_WHITE);
+    huge();
+    spr.setFreeFont(&FreeSansBold24pt7b);
+    if (spr.textWidth(TITLE) > W - 10) { spr.setFreeFont(&FreeSansBold18pt7b); }
+    spr.setTextDatum(MC_DATUM);
+    spr.drawString(TITLE, W / 2, SH / 2);
+
+    for (y = 0; y < SH; y++) {
+        for (x = 0; x < W; x++) { if (spr.readPixel(x, y)) { lit++; } }
+    }
+    step = lit > PB_MAXP ? (lit / PB_MAXP) + 1 : 1;
+
+    lit = 0;
+    for (y = 0; y < SH && pN < PB_MAXP; y++) {
+        for (x = 0; x < W && pN < PB_MAXP; x++) {
+            if (!spr.readPixel(x, y)) { continue; }
+            if ((lit++ % step) != 0) { continue; }
+            pTx[pN] = x;
+            pTy[pN] = y + 30;                  /* place the block on screen */
+            pN++;
+        }
+    }
+    spr.deleteSprite();                        /* ⚠ freed BEFORE animating */
+}
+
 static void playSplash()
 {
-    static const uint16_t GREYS[] = { 0x2104, 0x4208, 0x6B4D, 0x8410, 0xAD55, 0xD69A, 0xFFFF };
-    const int cy = 46;
-    int i;
+    int i, f;
 
     tft.fillScreen(C_BG);
+    splashArmed = false;             /* a button already down must not cancel us */
+    randomSeed(micros());
+    splashBuildTargets();
 
-    /* 1. CRT power-on: a hairline that opens vertically. */
-    for (i = 1; i <= 22; i++) {
-        int h = i * 3;
-        tft.fillRect(0, cy - h / 2, W, h, i > 18 ? C_BG : 0x18E3);
-        tft.drawFastHLine(0, cy, W, i < 6 ? TFT_WHITE : 0x8410);
-        if (splashWait(8)) { return; }
-    }
-    tft.fillScreen(C_BG);
-
-    /* 2. the title resolves out of the dark */
-    for (i = 0; i < (int)(sizeof(GREYS) / sizeof(GREYS[0])); i++) {
-        tft.setTextColor(GREYS[i], C_BG);
-        centreFit("PENSE BEM", 22, W - 8);
-        if (splashWait(45)) { return; }
+    if (pN == 0) {                             /* no RAM for the sprite: degrade */
+        centreFit("PENSE BEM", 44, W - 8, T_TITLE);
+        splashWait(700);
+        tft.fillScreen(C_BG);
+        return;
     }
 
-    /* 3. the four answer boxes sweep in — the toy's own signature — one note each */
-    for (i = 0; i < 4; i++) {
-        int x = 8 + i * 58, y = 72, w = 50, h = 44;
-        char c[2] = { (char)('A' + i), 0 };
-        switch (i) {
-        case 0: PLAY(SFX_SPLASH_A); break;
-        case 1: PLAY(SFX_SPLASH_B); break;
-        case 2: PLAY(SFX_SPLASH_C); break;
-        default: PLAY(SFX_SPLASH_D); break;
+    for (i = 0; i < pN; i++) {
+        pX[i] = (int16_t)(random(0, W) << 4);
+        pY[i] = (int16_t)(random(0, H) << 4);
+        pC[i] = DUST[random(0, 4)];
+    }
+
+    /* converge — ease-out, so it rushes in then settles */
+    for (f = 0; f < 46; f++) {
+        for (i = 0; i < pN; i++) {
+            int ox = pX[i] >> 4, oy = pY[i] >> 4;
+            tft.drawPixel(ox, oy, C_BG);
+            pX[i] += (int16_t)(((int32_t)(pTx[i] << 4) - pX[i]) * 30 >> 8);
+            pY[i] += (int16_t)(((int32_t)(pTy[i] << 4) - pY[i]) * 30 >> 8);
+            tft.drawPixel(pX[i] >> 4, pY[i] >> 4, pC[i]);
         }
-        tft.fillRect(x, y, w, h, C_SEL);
-        tft.setTextColor(C_BG, C_SEL);
-        huge(); tft.setTextDatum(TC_DATUM);
-        tft.drawString(c, x + w / 2, y + 2);
-        if (splashWait(130)) { return; }
+        if (f == 6)  { PLAY(SFX_SPLASH_A); }
+        if (f == 16) { PLAY(SFX_SPLASH_B); }
+        if (f == 26) { PLAY(SFX_SPLASH_C); }
+        if (f == 36) { PLAY(SFX_SPLASH_D); }
+        if (splashWait(10)) { tft.fillScreen(C_BG); return; }
     }
 
-    splashWait(420);
+    /* settle: snap to target, all one colour, so the word reads cleanly */
+    for (i = 0; i < pN; i++) {
+        tft.drawPixel(pX[i] >> 4, pY[i] >> 4, C_BG);
+        tft.drawPixel(pTx[i], pTy[i], TFT_WHITE);
+    }
+    if (splashWait(520)) { tft.fillScreen(C_BG); return; }
+
+    /* breathe once, the way the reference keeps shimmering */
+    for (f = 0; f < 2; f++) {
+        for (i = 0; i < pN; i += 3) { tft.drawPixel(pTx[i], pTy[i], DUST[2]); }
+        if (splashWait(90)) { tft.fillScreen(C_BG); return; }
+        for (i = 0; i < pN; i += 3) { tft.drawPixel(pTx[i], pTy[i], TFT_WHITE); }
+        if (splashWait(90)) { tft.fillScreen(C_BG); return; }
+    }
+
+    splashWait(200);
+    tft.fillScreen(C_BG);
 }
 
 // ---- screens ---------------------------------------------------------------
 
 static void drawStandby()
 {
+    /* ⚠ VERTICAL BUDGET, 135px tall. Every band states the face it uses, because
+       the heights are what must not collide:
+         y   2  version stamp   font1  ~8px  -> 10
+         y  16  title           <=24pt ~34px -> 50   ⚠ was y=10 and the stamp
+                                                      overlapped "BEM". 6px gap now.
+         y  56  last score       9pt   ~13px -> 69
+         y  76  start hint       9pt   ~13px -> 89
+         y  94  sound state      9pt   ~13px -> 107
+         y 116  button hints     9pt   ~13px -> 129   (H = 135) */
     tft.fillScreen(C_BG);
-    tft.setTextColor(C_TEXT, C_BG);
-    centreFit("PENSE BEM", 20, W - 8);
-    small();  tft.setTextColor(C_SEL, C_BG);
-    centreFit("OK PARA COMECAR", 76, W - 8);
-    /* ⚠ State first, then the verb. The old wording ("SELECT segurado = som OFF")
-       read as a DESCRIPTION OF THE GESTURE rather than the current setting, which
-       is ambiguous in the one moment it matters: silence with no explanation. */
-    tft.setTextColor(muted ? C_WRONG : C_DIM, C_BG);
-    centreFit(muted ? "SOM DESLIGADO" : "SOM LIGADO", 98, W - 8);
+
+    tft.setFreeFont(NULL); tft.setTextFont(1); tft.setTextSize(1);
     tft.setTextColor(C_DIM, C_BG);
-    drawHints("< OK", "segure = som >", H - 18);
+    tft.setTextDatum(TR_DATUM); tft.drawString(PB_VERSION, W - 4, 2);
+
+    tft.setTextColor(C_TEXT, C_BG);
+    centreFit("PENSE BEM", 16, W - 8, T_TITLE);
+
     if (lastScore >= 0) {
         char buf[40];
         snprintf(buf, sizeof(buf), "ultimo  L%02d S%d  %d pts", lastBook, lastSection, lastScore);
-        small(); tft.setTextColor(C_DIM, C_BG);
-        centre(buf, 74);
+        tft.setTextColor(C_DIM, C_BG);
+        centreFit(buf, 56, W - 8, T_SMALL);
     }
-    /* the build this board is actually running — see build.sh */
-    tft.setFreeFont(NULL); tft.setTextFont(1); tft.setTextSize(1);
+
+    tft.setTextColor(C_SEL, C_BG);
+    centreFit("OK PARA COMECAR", 76, W - 8, T_SMALL);
+
+    tft.setTextColor(muted ? C_WRONG : C_DIM, C_BG);
+    centreFit(muted ? "SOM DESLIGADO" : "SOM LIGADO", 94, W - 8, T_SMALL);
+
     tft.setTextColor(C_DIM, C_BG);
-    tft.setTextDatum(TR_DATUM); tft.drawString(PB_VERSION, W - 4, 4);
-    small();
+    drawHints("< OK", "segure = som >", 116);
 }
 
 static void drawCode()
@@ -409,9 +522,9 @@ static void drawBad()
 {
     tft.fillScreen(C_BG);
     tft.setTextColor(C_WRONG, C_BG);
-    centreFit("CODIGO INVALIDO", 28, W - 8);
+    centreFit("CODIGO INVALIDO", 26, W - 8, T_BIG);
     tft.setTextColor(C_TEXT, C_BG);
-    centreFit(badReason, 76, W - 8);
+    centreFit(badReason, 72, W - 8, T_SMALL);
 }
 
 static void drawQuestion()
@@ -465,16 +578,16 @@ static void drawJudge()
 
     if (lastVerdict == PB_RIGHT) {
         tft.setTextColor(C_RIGHT, C_BG);
-        centreFit("CERTO!", 32, W - 8);
+        centreFit("CERTO!", 30, W - 8, T_TITLE);
         small(); tft.setTextColor(C_TEXT, C_BG);
         snprintf(buf, sizeof(buf), "+%d pontos", pb_game_last_points(&game));
-        centre(buf, 92);
+        centreFit(buf, 92, W - 8, T_SMALL);
     } else if (lastVerdict == PB_RETRY) {
         tft.setTextColor(C_WRONG, C_BG);
-        centreFit("ERRADO", 30, W - 8);
+        centreFit("ERRADO", 30, W - 8, T_TITLE);
         tft.setTextColor(C_TRY, C_BG);
         snprintf(buf, sizeof(buf), "tentativa %d de 3", game.attempt);
-        centreFit(buf, 88, W - 8);
+        centreFit(buf, 92, W - 8, T_SMALL);
     } else {
         tft.setTextColor(C_WRONG, C_BG);
         medium(); centre("ERRADO", 8);
@@ -500,12 +613,12 @@ static void drawScore()
 
     tft.setTextColor(C_TEXT, C_BG);
     snprintf(buf, sizeof(buf), "%d", game.raw);
-    centreFit(buf, 34, W - 8);
+    centreFit(buf, 30, W - 8, T_TITLE);
     small(); tft.setTextColor(C_DIM, C_BG);
     snprintf(buf, sizeof(buf), "de 300      %d%%", norm);
-    centre(buf, 88);
+    centreFit(buf, 84, W - 8, T_SMALL);
     tft.setTextColor(band == 0 ? C_RIGHT : (band == 3 ? C_WRONG : C_TRY), C_BG);
-    centreFit(BANDS[band], 104, W - 8);
+    centreFit(BANDS[band], 100, W - 8, T_MED);
     tft.fillRect(0, H - 5, (int)((long)W * norm / 100), 5,
                  band == 0 ? C_RIGHT : (band == 3 ? C_WRONG : C_TRY));
 }
