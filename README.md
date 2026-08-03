@@ -66,18 +66,27 @@ That budget is a compile-time assertion.
 
 | | | where |
 |---|---|---|
-| **Board** | LilyGO TTGO **T-Display V1.1** — ESP32, 1.14" 240×135 ST7789V IPS, two buttons, USB-C, JST LiPo connector + charger | [official page](https://lilygo.cc/en-us/products/t-display) · [AliExpress](https://pt.aliexpress.com/w/wholesale-lilygo-t-display-v1.1.html) |
+| **Board** | LilyGO TTGO **T-Display V1.1** — ESP32, 1.14" 240×135 ST7789V IPS, two buttons, USB-C, JST LiPo connector + charging circuit | [AliExpress — official LilyGO store](https://pt.aliexpress.com/item/33050639690.html) · [lilygo.cc](https://lilygo.cc/en-us/products/t-display) |
 | **Passive buzzer** *(optional)* | two wires: `GPIO21` and `GND` | any passive/piezo buzzer |
 | **Everything else** | nothing. The board is the whole toy. | |
 
-Roughly US$12–18 for the board. Nothing else is required — no breadboard, no
-level shifters, no soldering. The screen, both buttons and the battery charger
-are already on it, which is most of why this board was chosen over a bare ESP32
-plus a separate display.
+Around **US$12–22** depending on options. Nothing else is required — no
+breadboard, no level shifters, no soldering. The screen, both buttons and the
+battery charger are already on it, which is most of why this board beats a bare
+ESP32 plus a separate display for a project like this.
 
-⚠ **Get the V1.1, not the T-Display-S3.** They look similar and are not
-interchangeable here: the S3 drives its panel over an 8-bit parallel bus and
-needs a different TFT_eSPI setup (Setup206 vs **Setup25**) and a different FQBN.
+**Two options worth getting right when you order:**
+
+- **`Com Versão Shell` / "with shell"** — the board plus a moulded case. Worth it
+  if this is going to be handled by a child, which is the whole point of the toy.
+- **`4MB` vs `16MB CH9102F`** — either works. The firmware is **~1.04 MB, 79 % of
+  the default 1.31 MB app partition**, which is the same on both. 16 MB only buys
+  you headroom for a larger partition scheme later.
+
+⚠ **Get the V1.1, not the T-Display-S3.** They look alike and are *not*
+interchangeable here — the S3 drives its panel over an 8-bit parallel bus, so it
+needs a different TFT_eSPI setup (Setup206 vs **Setup25**), a different FQBN, and
+different pins. Searching "lilygo t display" will happily show you both.
 
 `SELECT` is the **right** button, `OK` is the **left** one. Every on-screen hint
 is drawn on the *side* of the button it refers to, because a board with two
