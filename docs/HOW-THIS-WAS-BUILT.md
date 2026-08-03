@@ -236,6 +236,8 @@ height isn't fixed. They collided.
 
 The reference was a **particle assemble** — dust converging into a face.
 
+![the splash](splash.gif)
+
 **v3** renders the title into an off-screen sprite, harvests its lit pixels as
 targets, and flies ~900 particles into them. The shape *is* the rendered text,
 so the dust cannot land out of alignment with what it depicts. One shape, derived

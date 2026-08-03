@@ -11,6 +11,19 @@ multiple-choice questions. The device tells you if you're right.
 constants and six lines of arithmetic — which is the whole reason this project is
 interesting.
 
+<p align="center">
+  <img src="docs/splash.gif" width="420" alt="Boot: ~900 particles converge into PENSE BEM, then the standby screen">
+</p>
+
+<p align="center"><sub>Boot. The title is not drawn — it is <b>assembled</b>: the text is
+rendered to an off-screen sprite and its lit pixels become the targets ~900 particles
+fly into.</sub></p>
+
+### See it running
+
+- **[Boot + code entry](https://drive.google.com/file/d/1ibkhmrhZjWPmG_aU1f9fXT4cUaFk4v45/preview)**
+- **[Answering from a real printed book](https://drive.google.com/file/d/15JBqlwcrhhBKz7v20fLi9zfxgVIpkNsA/preview)**
+
 ```
 ┌──────────────────────────────────────────────┐
 │ Q07/30          #067            TENT 1/3     │
@@ -22,6 +35,9 @@ interesting.
 │ < OK responde                       troca >  │
 └──────────────────────────────────────────────┘
 ```
+
+`#067` is the number you look up in the printed book — not your position in the
+round (`Q07/30`). Without it, the review section is unusable.
 
 ---
 
