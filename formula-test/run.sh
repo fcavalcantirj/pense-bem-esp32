@@ -32,7 +32,7 @@ cd "$(dirname "$0")"
 CC=${CC:-cc}
 BIN=./pb-formula
 HDR=../pensebem.h
-INO=../esp32-pense-bem.ino
+INO=../pense-bem-esp32.ino
 BOOKS=fixtures/real-books.tsv
 TABLE=fixtures/reference-table.txt
 

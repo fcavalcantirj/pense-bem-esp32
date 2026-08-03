@@ -1,4 +1,4 @@
-/* esp32-pense-bem — the 1988 Tectoy "Pense Bem", book mode, on a LilyGO T-Display V1.1.
+/* pense-bem-esp32 — the 1988 Tectoy "Pense Bem", book mode, on a LilyGO T-Display V1.1.
  *
  *   SELECT = the RIGHT button (GPIO35)  short = next value · HOLD = auto-repeat
  *   OK     = the LEFT  button (GPIO0)   short = confirm. ⚠ NO HOLD GESTURE, EVER.
@@ -57,6 +57,9 @@ struct Note { uint16_t hz; uint16_t ms; };   /* hz == 0 is a rest */
 
 // ---- constants -------------------------------------------------------------
 
+/* ⚠ The mDNS/OTA name deliberately does NOT track the sketch filename. Renaming
+   this string renames the board on the network, which breaks `./build.sh ota`
+   until the board is reflashed over USB — a chicken-and-egg you do not want. */
 static const char *HOSTNAME = "esp32-pense-bem";
 
 // ⚠ PHYSICAL SIDES, AND THE UI DEPENDS ON THEM. With setRotation(1) the sibling

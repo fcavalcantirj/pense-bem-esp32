@@ -26,7 +26,7 @@
  *
  *
  * ⚠⚠ THIS FILE IS COMPILED BY TWO TOOLCHAINS AND MUST STAY THAT WAY:
- *       xtensa-esp32-elf-g++   (via esp32-pense-bem.ino, C++)
+ *       xtensa-esp32-elf-g++   (via pense-bem-esp32.ino, C++)
  *       cc -std=c99 -Wall -Wextra -Werror  (via formula-test/pb-formula.c, C99)
  *
  *   That dual compile is the ONLY reason formula-test proves anything about the

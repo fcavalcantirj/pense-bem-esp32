@@ -101,6 +101,10 @@ circuit is a piezo (drive it directly); **16–42 Ω is a magnetic coil, so put
 
 ## Build
 
+⚠ **Clone into a directory named `pense-bem-esp32`** (the default). `arduino-cli`
+requires the sketch file to be named after its folder — rename one and you must
+rename the other.
+
 ```bash
 arduino-cli core install esp32:esp32@3.3.10
 arduino-cli lib install TFT_eSPI@2.5.43     # then enable Setup25 in User_Setup_Select.h
@@ -126,7 +130,7 @@ access point down.
 |---|---|
 | `pensebem.h` | **the formula.** Pure C99, no Arduino headers. |
 | `pbgame.h` | **the session rules** — scoring, retries, advance, banding. |
-| `esp32-pense-bem.ino` | buttons and pixels. Owns no rules. |
+| `pense-bem-esp32.ino` | buttons and pixels. Owns no rules. |
 | `formula-test/` | 7-stage host proof of the formula and the port |
 | `game-test/` | host proof of the rules, written test-first |
 
