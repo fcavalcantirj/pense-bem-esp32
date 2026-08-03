@@ -243,6 +243,10 @@ with `tft.textWidth()` and steps 24 → 18 → 12 → 9 pt until it fits, so a l
 string *shrinks* instead of losing its first and last letters. **Rendering bugs
 are invisible to tests and obvious on glass — go look at the thing.**
 
+Three of this project's bugs were found that way, through
+**[claude-code-eyes](https://github.com/fcavalcantirj/claude-code-eyes)** — a camera skill that lets a coding agent actually
+see the panel it is drawing to.
+
 **The hint pointed at the wrong button.** `SELECT` was drawn left-aligned; SELECT
 is the right button. A tester held the left one and nothing happened — which was
 *correct behaviour* (`GPIO0` is a strapping pin and deliberately has no hold
