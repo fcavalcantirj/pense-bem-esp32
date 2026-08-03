@@ -131,6 +131,10 @@ wrong, or that drops `ArduinoOTA`, the board can only be recovered with a cable.
 **`SELECT` is the RIGHT button. `OK` is the LEFT one.** Every on-screen hint is
 drawn on the side of the button it means, so you never have to remember this.
 
+0. It opens with a ~1.5 s splash — the screen powers on CRT-style, the title
+   resolves, and `A B C D` sweep in on a rising arpeggio. **Tap OK to skip it.**
+   ⚠ Tap during the splash; don't hold from power-on, or you'll boot into USB
+   download mode instead (OK is `GPIO0`, a strapping pin).
 1. **OK** to start.
 2. Enter a three-digit code — **SELECT** changes the digit (**hold it** to spin),
    **OK** confirms. `⌫` at the end of the cycle erases.

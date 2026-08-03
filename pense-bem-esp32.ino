@@ -162,6 +162,11 @@ static const Note SFX_BAD[]    = { {160, 90}, {0, 50}, {160, 90} };
    not a feature — so if you hear nothing, check the standby screen: it states
    the mute state in words. */
 static const Note SFX_BOOT[]   = { {660, 70}, {880, 70}, {1320, 120} };
+/* One note per answer box as it sweeps in — A B C D, rising. */
+static const Note SFX_SPLASH_A[] = { {523, 90} };
+static const Note SFX_SPLASH_B[] = { {659, 90} };
+static const Note SFX_SPLASH_C[] = { {784, 90} };
+static const Note SFX_SPLASH_D[] = { {1047, 220} };
 // The four end-of-session songs, one per score band — the toy really had four.
 static const Note SONG_0[] = { {523,140},{659,140},{784,140},{1047,320} };           // OTIMO
 static const Note SONG_1[] = { {523,150},{659,150},{784,300} };                      // MUITO BEM
@@ -265,6 +270,79 @@ static void drawHints(const char *l, const char *r, int y)
 }
 
 static const char *BANDS[4] = { "OTIMO", "MUITO BEM", "QUASE LA", "TENTE MAIS" };
+
+// ---- splash ----------------------------------------------------------------
+//
+// ⚠ This BLOCKS, and that is fine here and nowhere else: nothing else is running
+//   at boot, there is no watchdog armed, and no input is meaningful yet. It still
+//   pumps soundTick() on every pass, because the note player is non-blocking by
+//   design and would otherwise go silent for the whole animation.
+//
+// ⚠ Skippable. A splash you cannot skip becomes annoying by the twentieth boot —
+//   TAP OK during it to cut straight to standby. ⚠ Tap, do not hold from
+//   power-on: OK is GPIO0, and holding it through reset puts the ESP32 into USB
+//   download mode instead of running this firmware at all.
+
+static bool splashSkip()
+{
+    return digitalRead(PIN_OK) == LOW;
+}
+
+/* Sleeps while keeping sound alive; returns true if the user asked to skip. */
+static bool splashWait(uint32_t ms)
+{
+    uint32_t t0 = millis();
+    while (millis() - t0 < ms) {
+        soundTick();
+        if (splashSkip()) { return true; }
+        delay(4);
+    }
+    return false;
+}
+
+static void playSplash()
+{
+    static const uint16_t GREYS[] = { 0x2104, 0x4208, 0x6B4D, 0x8410, 0xAD55, 0xD69A, 0xFFFF };
+    const int cy = 46;
+    int i;
+
+    tft.fillScreen(C_BG);
+
+    /* 1. CRT power-on: a hairline that opens vertically. */
+    for (i = 1; i <= 22; i++) {
+        int h = i * 3;
+        tft.fillRect(0, cy - h / 2, W, h, i > 18 ? C_BG : 0x18E3);
+        tft.drawFastHLine(0, cy, W, i < 6 ? TFT_WHITE : 0x8410);
+        if (splashWait(8)) { return; }
+    }
+    tft.fillScreen(C_BG);
+
+    /* 2. the title resolves out of the dark */
+    for (i = 0; i < (int)(sizeof(GREYS) / sizeof(GREYS[0])); i++) {
+        tft.setTextColor(GREYS[i], C_BG);
+        centreFit("PENSE BEM", 22, W - 8);
+        if (splashWait(45)) { return; }
+    }
+
+    /* 3. the four answer boxes sweep in — the toy's own signature — one note each */
+    for (i = 0; i < 4; i++) {
+        int x = 8 + i * 58, y = 72, w = 50, h = 44;
+        char c[2] = { (char)('A' + i), 0 };
+        switch (i) {
+        case 0: PLAY(SFX_SPLASH_A); break;
+        case 1: PLAY(SFX_SPLASH_B); break;
+        case 2: PLAY(SFX_SPLASH_C); break;
+        default: PLAY(SFX_SPLASH_D); break;
+        }
+        tft.fillRect(x, y, w, h, C_SEL);
+        tft.setTextColor(C_BG, C_SEL);
+        huge(); tft.setTextDatum(TC_DATUM);
+        tft.drawString(c, x + w / 2, y + 2);
+        if (splashWait(130)) { return; }
+    }
+
+    splashWait(420);
+}
 
 // ---- screens ---------------------------------------------------------------
 
@@ -686,9 +764,13 @@ void setup()
         Serial.println();
     }
 
+    /* ⚠ The splash doubles as the buzzer wiring self-test the boot beep used to
+       be: four rising notes as the boxes land. Silent board + "SOM LIGADO" on
+       standby still means check the wiring. */
+    playSplash();
+
     lastInput = millis();
     go(SC_STANDBY);
-    PLAY(SFX_BOOT);   /* buzzer wiring self-test — see SFX_BOOT */
 }
 
 void loop()
