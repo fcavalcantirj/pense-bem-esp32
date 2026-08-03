@@ -1,6 +1,9 @@
 # firmware secrets — WiFi credentials and the OTA password
 secrets.h
 
+# generated at build time from git describe
+version.h
+
 # build artifacts
 build/
 formula-test/pb-formula
