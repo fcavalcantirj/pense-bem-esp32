@@ -25,6 +25,70 @@ fly into.</sub></p>
 - **[The boot animation](https://drive.google.com/file/d/15JBqlwcrhhBKz7v20fLi9zfxgVIpkNsA/preview)** — particles assembling into the title
 - **[An over-the-air fix landing](https://drive.google.com/file/d/1ibkhmrhZjWPmG_aU1f9fXT4cUaFk4v45/preview)** — a rendering bug caught on camera, fixed, and reflashed without touching the board
 
+---
+
+## Get it running
+
+You need a **LilyGO T-Display V1.1** and a **USB-C data cable**. Nothing else.
+(⚠ a charge-only cable gives a dark screen *and* no serial port, and looks
+exactly like a dead board.)
+
+### If you're doing it yourself
+
+```bash
+# toolchain — the core version is PINNED; build.sh refuses anything else
+arduino-cli core install esp32:esp32@3.3.10
+arduino-cli lib install TFT_eSPI@2.5.43
+
+# tell TFT_eSPI it's a T-Display V1.1 (it picks the panel from ONE global file)
+SEL=~/Documents/Arduino/libraries/TFT_eSPI/User_Setup_Select.h
+sed -i '' 's|^#include <User_Setup.h>|//#include <User_Setup.h>|' "$SEL"
+sed -i '' 's|^//#include <User_Setups/Setup25_TTGO_T_Display.h>|#include <User_Setups/Setup25_TTGO_T_Display.h>|' "$SEL"
+
+# ⚠ keep the folder name — arduino-cli needs the .ino basename to match it
+git clone https://github.com/fcavalcantirj/pense-bem-esp32.git
+cd pense-bem-esp32
+
+cp secrets.h.example secrets.h    # wifi is for OTA only; the game never uses it
+./build.sh                        # runs both test suites, then compiles
+./build.sh flash                  # first flash over USB
+```
+
+Full walkthrough with every trap: **[INSTALL.md](INSTALL.md)**
+
+### If you'd rather an agent do it
+
+Paste this into [Claude Code](https://claude.com/claude-code) (or any coding
+agent) in an empty directory:
+
+```text
+Flash this ESP32 firmware to my LilyGO T-Display V1.1, which is connected over USB.
+
+  https://github.com/fcavalcantirj/pense-bem-esp32
+
+Read AGENTS.md in that repo FIRST and follow it — it has the pinned toolchain
+versions, ten hard constraints, and the traps that will otherwise cost you an hour.
+
+Four that bite immediately:
+  - clone into a folder named exactly "pense-bem-esp32"; arduino-cli requires the
+    .ino basename to equal its directory name
+  - install esp32:esp32@3.3.10 specifically, not latest
+  - TFT_eSPI must be switched to Setup25 (T-Display V1.1) in User_Setup_Select.h
+  - check EXIT CODES, not output: `./build.sh | grep PASSED` reports the grep,
+    not the build. Use `./build.sh && echo ok`.
+
+Ask me for my wifi SSID/password and an OTA password for secrets.h — do not
+invent them, and do not commit that file.
+
+Then run both host test suites, compile, and flash over USB. Tell me the flash
+percentage and the build stamp when it's done.
+```
+
+Then look at the board. **If anything renders wrong, the tests will not tell you** —
+three of this project's bugs were only ever visible on the panel.
+
+---
+
 ```
 ┌──────────────────────────────────────────────┐
 │ Q07/30          #067            TENT 1/3     │
