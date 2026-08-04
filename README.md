@@ -18,15 +18,31 @@ interesting.
 ### ⚠ One thing it sends · Uma coisa que ele envia
 
 **EN** — Once per boot, the board POSTs to `api.pense-bem-wars.com`: **a random
-UUID it generated on itself, and the firmware build stamp. Nothing else.** Not
-your MAC address, not a score, not an answer, not which book you opened. It says
-so on screen the first time you switch it on, in Portuguese and English.
+UUID it generated on itself, the firmware build stamp, and a signature over
+those two. Nothing else.** Not your MAC address, not a score, not an answer, not
+which book you opened. It says so on screen the first time you switch it on, in
+Portuguese and English.
 
 It exists for one reason: I set a gate before publishing — **50 GitHub stars and
 5 boards actually flashed** — and I wanted the second number measured instead of
-guessed. It is trivially spoofable with one `curl`; it is a decision aid for me,
-not a metric anyone should defend. The count is *boards that said hello*, never
-*users*.
+guessed. The count is *boards that said hello*, never *users*.
+
+**About that signature, plainly.** The server publishes two numbers:
+`{"boards":N,"signed":M}`. `boards` counts anything well-formed and **is still
+spoofable with one `curl`** — that has not changed. `signed` counts requests that
+carried a correct HMAC-SHA256 under a key that is not in this repo, so a flood of
+forged POSTs moves the first number and cannot move the second. That is the only
+thing it buys: a flood becomes *visible* rather than silently mixed in.
+
+⚠ **It is not a lock, and I would rather say so than be caught claiming it.** If
+you build this firmware yourself you will not have my key, so your board reports
+**unsigned — and it still counts**. Nothing is refused, no feature is lost, the
+game is identical. There is no arrangement in which public firmware holds a
+secret an attacker cannot also hold; that is information theory, not a gap I
+forgot to close. (Nor is there a hardware way out on this chip: the only
+device-unique value on a classic ESP32 is the factory eFuse **MAC**, which is
+broadcast in every WiFi frame — so it identifies without authenticating, and this
+project refuses to send it anyway.)
 
 **Turn it off completely:** set `#define PB_PHONE_HOME 0` in
 `pense-bem-esp32.ino`. That removes the request, the UUID, the consent screen and
@@ -40,9 +56,23 @@ it next, and nobody can reflash your board but you. That switch is your own
 defence, not a setting.
 
 **PT** — Uma vez por inicialização, a placa envia para `api.pense-bem-wars.com`:
-**um UUID aleatório que ela mesma gerou, e a versão do firmware. Nada mais.** Não
-envia o endereço MAC, nem pontuação, nem resposta, nem qual livro você abriu. Ela
-avisa na tela na primeira vez que você liga, em português e em inglês.
+**um UUID aleatório que ela mesma gerou, a versão do firmware e uma assinatura
+dessas duas coisas. Nada mais.** Não envia o endereço MAC, nem pontuação, nem
+resposta, nem qual livro você abriu. Ela avisa na tela na primeira vez que você
+liga, em português e em inglês.
+
+Sobre a assinatura, sem enfeite: o servidor publica dois números,
+`{"boards":N,"signed":M}`. O primeiro conta qualquer requisição bem formada e
+**continua sendo falsificável com um `curl`** — isso não mudou. O segundo exige
+uma chave que não está neste repositório, então uma enxurrada de POSTs forjados
+mexe no primeiro número e não mexe no segundo. É só isso que ela compra: a
+falsificação fica *visível*, não impedida.
+
+⚠ **Não é cadeado.** Se você compilar este firmware, não terá a minha chave: a
+sua placa reporta **sem assinatura — e continua sendo contada**. Nada é recusado,
+nada é perdido, o jogo é idêntico. Não existe arranjo em que um firmware público
+guarde um segredo que o atacante não possa ter também.
+
 Para desligar de vez: `#define PB_PHONE_HOME 0` no `pense-bem-esp32.ino`.
 
 ---

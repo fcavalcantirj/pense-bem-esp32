@@ -19,8 +19,8 @@ este projeto interessante.
 ## ⚠ Uma coisa que ele envia
 
 Uma vez por inicialização, a placa faz um POST para `api.pense-bem-wars.com`
-contendo **um UUID aleatório que ela mesma gerou, e a versão do firmware. Nada
-mais.**
+contendo **um UUID aleatório que ela mesma gerou, a versão do firmware, e uma
+assinatura dessas duas coisas. Nada mais.**
 
 Não envia o endereço MAC. Não envia pontuação. Não envia resposta. Não envia
 qual livro você abriu. Não envia onde você está.
@@ -30,10 +30,23 @@ inglês, antes de enviar qualquer coisa.
 
 **Por que isso existe:** antes de publicar o projeto eu defini uma meta —
 **50 estrelas no GitHub e 5 placas realmente montadas** — e queria que o segundo
-número fosse medido, não chutado. Alguém consegue falsificar essa contagem com um
-único `curl`; ela serve para eu decidir se construo a versão multiplayer, e não
-como métrica que eu defenderia. O número é *placas que disseram olá*, nunca
-*usuários*.
+número fosse medido, não chutado. Ela serve para eu decidir se construo a versão
+multiplayer, e não como métrica que eu defenderia. O número é *placas que
+disseram olá*, nunca *usuários*.
+
+**Sobre a assinatura, sem enfeite.** A placa também manda um HMAC-SHA256 do que
+enviou, e o servidor publica dois números: `{"boards":N,"signed":M}`. O primeiro
+conta qualquer requisição bem formada e **continua sendo falsificável com um
+único `curl`** — isso não mudou. O segundo exige uma chave que não está neste
+repositório, então uma enxurrada de POSTs forjados mexe no primeiro número e não
+mexe no segundo. É só isso que ela compra: a falsificação fica *visível*.
+
+⚠ **Não é cadeado, e prefiro dizer isso a ser pego alegando o contrário.** Se
+você compilar este firmware, não terá a minha chave: a sua placa reporta **sem
+assinatura — e continua sendo contada**. Nada é recusado, nada é perdido, o jogo
+é idêntico. Não existe arranjo em que um firmware público guarde um segredo que o
+atacante não possa ter também — isso é teoria da informação, não uma brecha que
+eu esqueci de fechar.
 
 **Para desligar completamente:** coloque `#define PB_PHONE_HOME 0` no
 `pense-bem-esp32.ino`. Isso remove a requisição, o UUID, a tela de aviso e toda a
