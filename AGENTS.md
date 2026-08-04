@@ -89,7 +89,15 @@ Violating any of these produces a defect that tests will not catch.
    down errors via a prototype you never wrote.
 8. **No `delay()` in the sound player.** It would freeze the button scan and the
    idle timer.
-9. **WiFi is for OTA only.** No game path may read the network.
+9. **No game path may read the network.** The answer is pure arithmetic and the
+   game plays identically with every access point down. WiFi carries exactly two
+   things: OTA reflashing, and **one POST per boot** to `api.pense-bem-wars.com`
+   containing a random UUID the board generated itself plus `PB_VERSION` —
+   nothing else, never the MAC. It is disclosed on screen at first boot in both
+   languages and compiled out entirely by `#define PB_PHONE_HOME 0`.
+   ⚠ This constraint previously read *"WiFi is for OTA only"*; it was amended on
+   2026-08-03 when that stopped being true, rather than left to mislead.
+   See `pbhello.h` and `hello-test/`.
 10. **Keep the folder name `pense-bem-esp32`.** `arduino-cli` requires the `.ino`
     basename to equal its directory. A clone into any other name will not build.
 

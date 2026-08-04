@@ -40,6 +40,8 @@ bash formula-test/run.sh
 echo
 bash game-test/run.sh
 echo
+bash hello-test/run.sh
+echo
 
 arduino-cli compile --fqbn "$FQBN" .
 

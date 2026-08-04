@@ -1,8 +1,10 @@
 # Pense Bem · ESP32
 
+*[Leia em português](LEIAME.md)*
+
 A working recreation of the **Pense Bem** (Tectoy, Brazil, 1988) — the electronic
 activity-book toy — on a LilyGO T-Display V1.1. Two buttons, a colour screen, no
-internet, no database, no cloud.
+database, no cloud, and no internet needed to play.
 
 You type a three-digit code, open the matching printed book, and answer thirty
 multiple-choice questions. The device tells you if you're right.
@@ -10,6 +12,47 @@ multiple-choice questions. The device tells you if you're right.
 **It does not store a single answer.** It *derives* all 14 850 of them from two
 constants and six lines of arithmetic — which is the whole reason this project is
 interesting.
+
+---
+
+### ⚠ One thing it sends · Uma coisa que ele envia
+
+**EN** — Once per boot, the board POSTs to `api.pense-bem-wars.com`: **a random
+UUID it generated on itself, and the firmware build stamp. Nothing else.** Not
+your MAC address, not a score, not an answer, not which book you opened. It says
+so on screen the first time you switch it on, in Portuguese and English.
+
+It exists for one reason: I set a gate before publishing — **50 GitHub stars and
+5 boards actually flashed** — and I wanted the second number measured instead of
+guessed. It is trivially spoofable with one `curl`; it is a decision aid for me,
+not a metric anyone should defend. The count is *boards that said hello*, never
+*users*.
+
+**Turn it off completely:** set `#define PB_PHONE_HOME 0` in
+`pense-bem-esp32.ino`. That removes the request, the UUID, the consent screen and
+the entire HTTP stack — 124 KB, and the hostname is verifiably absent from the
+built image.
+
+⚠ **Why that switch matters beyond preference:** the hostname is compiled into the
+binary. The domain is registered to **2027-08-04** with auto-renew on — but if it
+ever lapsed, boards still running this firmware would POST to whoever registered
+it next, and nobody can reflash your board but you. That switch is your own
+defence, not a setting.
+
+**PT** — Uma vez por inicialização, a placa envia para `api.pense-bem-wars.com`:
+**um UUID aleatório que ela mesma gerou, e a versão do firmware. Nada mais.** Não
+envia o endereço MAC, nem pontuação, nem resposta, nem qual livro você abriu. Ela
+avisa na tela na primeira vez que você liga, em português e em inglês.
+Para desligar de vez: `#define PB_PHONE_HOME 0` no `pense-bem-esp32.ino`.
+
+---
+
+**Want the multiplayer version?** ⭐ **[Star this repo](https://github.com/fcavalcantirj/pense-bem-esp32)** —
+that star is literally the vote, and the gate above is real. Below it, *Pense Bem
+Wars* does not get built.
+
+☕ [Buy me a coffee](https://buymeacoffee.com/fcavalcantirj) — never required, and
+there is nothing to buy here. You buy your own ~US$15 board and the code is free.
 
 <p align="center">
   <img src="docs/splash.gif" width="420" alt="Boot: ~900 particles converge into PENSE BEM, then the standby screen">
