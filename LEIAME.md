@@ -1,6 +1,6 @@
 # Pense Bem · ESP32
 
-*[Read in English](README.md)*
+*[Read in English](README.md)* · **[pense-bem-wars.com](https://pense-bem-wars.com)**
 
 Uma recriação funcional do **Pense Bem** (Tectoy, Brasil, 1988) — aquele
 brinquedo eletrônico de livro de atividades — numa LilyGO T-Display V1.1. Dois
