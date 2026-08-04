@@ -41,8 +41,19 @@
    the two fields already disclosed, and carries no further fact about the
    device or its owner. It is bumped anyway because the rule is "the payload
    changed", not "I judged the change harmless", and a consent mechanism whose
-   trigger is somebody's judgement is not a mechanism. */
-#define PB_HELLO_PAYLOAD_VERSION 2
+   trigger is somebody's judgement is not a mechanism.
+
+   v3 (2026-08-04) — ⚠ THE PAYLOAD DID NOT CHANGE. WHAT CONSENT *MEANS* DID.
+   Every v2 flag on a board was written by the old disclosure, which drew the
+   notice, waited five seconds and continued on its own. One was observed being
+   written during an OTA reboot with nobody in the room. A value recorded that
+   way says "this was displayed", and it is stored in a field everyone reads as
+   "this person agreed" — so it is not consent and it must not be honoured as
+   consent. Bumping retires every such flag and asks again, this time with a
+   press. Stretching this constant to cover a change in meaning rather than a
+   change in fields is deliberate: the alternative is silently inheriting an
+   answer nobody gave, which is the exact failure the versioning exists for. */
+#define PB_HELLO_PAYLOAD_VERSION 3
 
 /* 36 characters plus a terminator. */
 #define PB_HELLO_UUID_LEN 37
@@ -171,6 +182,76 @@ static inline size_t pb_hello_payload(const char *uuid, const char *version,
     return o;
 }
 
+/* ── consent: an affirmative press, not a timer ────────────────────────────
+ *
+ * ⚠ THE DEFECT THIS REPLACES WAS MEASURED ON A REAL BOARD, 2026-08-04.
+ *
+ * The disclosure used to draw each page, wait five seconds, and continue on its
+ * own. Then an OTA update rebooted the board while nobody was in the room: the
+ * notice rendered to an empty desk, the consent flag was written, and the
+ * payload was sent. Every line of that was working as coded.
+ *
+ * **A consent screen that can satisfy itself unattended is a display, not a
+ * consent.** The flag recorded "this was drawn for five seconds", which is not
+ * the fact anyone wants it to mean. It now records "a person pressed a button".
+ *
+ * ⚠ A RELEASE MUST BE SEEN BEFORE A PRESS COUNTS, and that is not defensive
+ * programming — it is this exact pin. PIN_OK is GPIO0, a strapping pin: holding
+ * it low at reset puts the ESP32 in ROM download mode, so "held down while the
+ * board comes up" is a real state, not a hypothetical. A level test would read
+ * that held button as instant consent. So would a button that is stuck or
+ * shorted. Requiring the DOWN edge means a button nobody touched can never
+ * answer for the person who was supposed to.
+ *
+ * ⚠ AND IT MUST BE ABLE TO GIVE UP. An earlier version of this fix blocked
+ * until pressed, which hangs a board whose button is broken — before the game,
+ * which is the part that matters. Phoning home is the optional half. So the
+ * wait times out, and a timeout means NOT CONSENTED: nothing is sent, nothing
+ * is recorded, the game starts anyway, and the question is asked again on the
+ * next boot. Refusing by walking away is a valid answer.
+ *
+ * Pure so hello-test/ can drive it with a scripted button; the sketch feeds it
+ * digitalRead(). No Arduino types here on purpose. */
+
+typedef struct {
+    int seen_release;   /* the button has been observed UP at least once */
+    int acked;          /* a full release-then-press edge has been seen */
+} pb_consent;
+
+#define PB_CONSENT_WAIT     0
+#define PB_CONSENT_ACCEPTED 1
+#define PB_CONSENT_TIMEOUT  (-1)
+
+static inline void pb_consent_init(pb_consent *c)
+{
+    c->seen_release = 0;
+    c->acked = 0;
+}
+
+/* pb_consent_step advances the wait by one sample.
+ *
+ * button_down: 1 if the button reads pressed right now (active-low pin already
+ *              converted by the caller — this function knows nothing of pins).
+ * elapsed_ms:  how long this page has been waiting.
+ * timeout_ms:  give-up threshold.
+ *
+ * Returns PB_CONSENT_ACCEPTED, PB_CONSENT_TIMEOUT, or PB_CONSENT_WAIT.
+ *
+ * ⚠ ACCEPTANCE IS CHECKED BEFORE THE TIMEOUT. A press landing on the same
+ * sample as the deadline is a person who pressed the button, and losing it to
+ * a race with a clock would be the rudest possible way to fail. */
+static inline int pb_consent_step(pb_consent *c, int button_down,
+                                  unsigned long elapsed_ms,
+                                  unsigned long timeout_ms)
+{
+    if (!button_down) c->seen_release = 1;
+    else if (c->seen_release) c->acked = 1;
+
+    if (c->acked) return PB_CONSENT_ACCEPTED;
+    if (elapsed_ms >= timeout_ms) return PB_CONSENT_TIMEOUT;
+    return PB_CONSENT_WAIT;
+}
+
 /* ── the disclosure text ───────────────────────────────────────────────────
  * ⚠ LIVES HERE SO THE SKETCH AND hello-test/fit.c SHARE ONE COPY. A test that
  * re-types the strings it is checking proves only that someone typed them twice.
@@ -194,7 +275,7 @@ static inline size_t pb_hello_payload(const char *uuid, const char *version,
 #define PB_HELLO_LINES 7
 
 static const char *const PB_HELLO_PT[PB_HELLO_LINES] = {
-    "AVISA UMA VEZ",
+    "<OK  AVISA UMA VEZ",
     "numero aleatorio, versao",
     "e uma assinatura",
     "nada mais, sem cripto",
@@ -204,7 +285,7 @@ static const char *const PB_HELLO_PT[PB_HELLO_LINES] = {
 };
 
 static const char *const PB_HELLO_EN[PB_HELLO_LINES] = {
-    "SAYS HELLO",
+    "<OK  SAYS HELLO",
     "sends a random number,",
     "the version and a signature",
     "nothing else, not encrypted",
@@ -213,7 +294,19 @@ static const char *const PB_HELLO_EN[PB_HELLO_LINES] = {
     "PB_PHONE_HOME 0",
 };
 
-/* ⚠ "sem cripto" / "not encrypted" IS STILL TRUE AND MUST STAY TRUE. A
+/* ⚠ THE TITLE CARRIES THE PROMPT, AND THAT IS FORCED BY GEOMETRY, NOT TASTE.
+   Consent is now an affirmative press, so the notice has to say which button —
+   but the seven body lines already end at y=133 of a 135px panel, so there is
+   no room for an eighth. The title is the ONLY line drawn at T_MED, which means
+   centreFit steps it down a size instead of clipping it; every body line is
+   already at the floor and would clip. So the prompt goes where it cannot break.
+
+   ⚠ "<OK" IS POSITIONAL, NOT A NAME. OK is the LEFT button. This board has two
+   unlabelled buttons and this project has already shipped a hint that named a
+   logical button while pointing at the wrong physical one — a coin flip the
+   user loses half the time. An arrow cannot be ambiguous about which side.
+
+   ⚠ "sem cripto" / "not encrypted" IS STILL TRUE AND MUST STAY TRUE. A
    signature authenticates; it does not encrypt. The body still crosses the
    network in plain text, readable by anyone on the path, exactly as before —
    so the line that says so is not weakened by the line above it. If this ever

@@ -196,12 +196,93 @@ int main(void)
     {
         eq_int("first boot (nothing stored) must disclose",
                pb_hello_needs_disclosure(0), 1);
-        eq_int("consent given for payload v1 does NOT cover v2",
+        eq_int("consent given for payload v1 does NOT cover the current one",
                pb_hello_needs_disclosure(1), 1);
-        eq_int("consent given for payload v2 covers v2",
-               pb_hello_needs_disclosure(2), 0);
+        /* ⚠ v2 flags were written by the OLD timer-based disclosure — displayed,
+           never answered. They must NOT carry forward. */
+        eq_int("a v2 flag (recorded by a timer, not a press) is retired",
+               pb_hello_needs_disclosure(2), 1);
+        eq_int("consent given for payload v3 covers v3",
+               pb_hello_needs_disclosure(3), 0);
         eq_int("consent from an older payload does NOT carry forward",
                pb_hello_needs_disclosure(-1), 1);
+    }
+
+    /* ---- 8. consent is a PRESS, never a timer --------------------------
+       ⚠ THIS SECTION EXISTS BECAUSE THE OLD BEHAVIOUR WAS OBSERVED FAILING ON
+       REAL HARDWARE. An OTA reboot drew the notice to an empty room, waited its
+       five seconds, recorded consent and sent the payload. Nothing errored. */
+    {
+        pb_consent c;
+        int r;
+
+        /* A button held DOWN from the start must never count. This is the
+           GPIO0 case specifically: it is a strapping pin, so "held low while
+           the board comes up" is a real boot state, not a hypothetical — and a
+           stuck or shorted button looks identical. */
+        pb_consent_init(&c);
+        r = PB_CONSENT_WAIT;
+        for (unsigned long t = 0; t < 5000 && r == PB_CONSENT_WAIT; t += 10)
+            r = pb_consent_step(&c, 1, t, 30000);
+        eq_int("a button held down from the start never consents",
+               r == PB_CONSENT_ACCEPTED, 0);
+
+        /* Released then pressed — the real human. */
+        pb_consent_init(&c);
+        r = pb_consent_step(&c, 0, 0, 30000);
+        eq_int("  released: still waiting", r, PB_CONSENT_WAIT);
+        r = pb_consent_step(&c, 1, 10, 30000);
+        eq_int("  then pressed: accepted", r, PB_CONSENT_ACCEPTED);
+
+        /* Held from boot, then released, then pressed: consent from the moment
+           a real edge exists, not before. */
+        pb_consent_init(&c);
+        eq_int("held at entry, still waiting",
+               pb_consent_step(&c, 1, 0, 30000), PB_CONSENT_WAIT);
+        eq_int("  released, still waiting",
+               pb_consent_step(&c, 0, 10, 30000), PB_CONSENT_WAIT);
+        eq_int("  pressed, now accepted",
+               pb_consent_step(&c, 1, 20, 30000), PB_CONSENT_ACCEPTED);
+
+        /* Nobody there. Times out, and a timeout is NOT consent. */
+        pb_consent_init(&c);
+        r = PB_CONSENT_WAIT;
+        for (unsigned long t = 0; t <= 30000 && r == PB_CONSENT_WAIT; t += 10)
+            r = pb_consent_step(&c, 0, t, 30000);
+        eq_int("nobody presses: times out", r, PB_CONSENT_TIMEOUT);
+        eq_int("  and a timeout is NOT consent", r == PB_CONSENT_ACCEPTED, 0);
+
+        /* ⚠ The boundary, by name. A press landing on the same sample as the
+           deadline belongs to a person who pressed the button; losing it to a
+           race with a clock is the rudest possible way to fail. */
+        pb_consent_init(&c);
+        pb_consent_step(&c, 0, 0, 1000);            /* establish the release */
+        eq_int("press exactly at the deadline is accepted, not timed out",
+               pb_consent_step(&c, 1, 1000, 1000), PB_CONSENT_ACCEPTED);
+
+        /* And one sample earlier is plain acceptance, so the case above is not
+           passing for some unrelated reason. */
+        pb_consent_init(&c);
+        pb_consent_step(&c, 0, 0, 1000);
+        eq_int("press just before the deadline is accepted",
+               pb_consent_step(&c, 1, 999, 1000), PB_CONSENT_ACCEPTED);
+
+        /* Once accepted it stays accepted — releasing afterwards must not
+           un-consent, or letting go of the button would revoke the answer. */
+        pb_consent_init(&c);
+        pb_consent_step(&c, 0, 0, 1000);
+        pb_consent_step(&c, 1, 10, 1000);
+        eq_int("releasing after a press does not un-consent",
+               pb_consent_step(&c, 0, 20, 1000), PB_CONSENT_ACCEPTED);
+
+        /* ⚠ And it must not resurrect after a timeout either: a board that
+           timed out, then someone wanders past and knocks the button, must not
+           retroactively decide it was told. The caller stops sampling at
+           timeout — this pins that the state itself is not the thing keeping
+           that true. */
+        pb_consent_init(&c);
+        eq_int("timeout is reached with no release seen",
+               pb_consent_step(&c, 1, 5000, 1000), PB_CONSENT_TIMEOUT);
     }
 
     if (fails) { printf("\n%d FAILED\n", fails); return 1; }

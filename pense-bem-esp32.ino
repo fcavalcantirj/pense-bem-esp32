@@ -955,6 +955,15 @@ static char     helloUuid[PB_HELLO_UUID_LEN] = "";
 static char     helloBody[PB_HELLO_MAX_PAYLOAD] = "";
 static char     helloSign[PB_HMAC_HEX_LEN] = "";
 static bool     helloDone     = false;   // one attempt per boot, win or lose
+/* ⚠ NOTHING IS SENT UNTIL THIS IS TRUE. Set only by a real button press on the
+   disclosure, never by a timer. A board nobody answered plays the game and says
+   nothing — that is the correct outcome, not a degraded one. */
+static bool     helloConsented = false;
+
+/* How long a page waits for a press before giving up. Generous, because the
+   cost of waiting is a delayed game and the cost of giving up early is a person
+   who wanted to consent and was not given the chance. */
+static const uint32_t PB_CONSENT_TIMEOUT_MS = 30000;
 static uint32_t helloEarliest = 0;
 
 /* The disclosure, shown once per payload version, BEFORE anything is sent.
@@ -974,7 +983,7 @@ static uint32_t helloEarliest = 0;
    costs flash on a partition already near full, and the payload is a random
    number plus a version string. If that ever changes to HTTPS, change this line
    in the same commit. */
-static void helloDisclose()
+static bool helloDisclose()
 {
     /* ⚠ The strings live in pbhello.h so hello-test/fit.c measures the SAME
        copy the panel draws. Re-typing them here would make that test prove only
@@ -993,16 +1002,36 @@ static void helloDisclose()
         for (int i = 1; i < PB_HELLO_LINES; i++)
             centreFit(page[p][i], 26 + (i - 1) * 17, W - 8, T_SMALL);
 
-        /* Held for a minimum before OK can skip, so one press cannot dismiss
-           both pages — which would mean the English one was never displayed. */
+        /* ⚠ WAIT FOR A PRESS. NOT A TIMER.
+           The previous version drew the page, waited five seconds and carried
+           on by itself. On 2026-08-04 an OTA reboot ran it with nobody in the
+           room: the notice rendered to an empty desk, consent was recorded and
+           the payload was sent. Every line worked as coded, and the flag meant
+           "this was drawn", which is not what anyone reads it as.
+
+           ⚠ The decision lives in pb_consent_step() in pbhello.h, which is pure
+           and host-tested, because the interesting part is not the loop — it is
+           that a button already DOWN must never count (GPIO0 is a strapping
+           pin, so held-at-boot is a real state, and a shorted button looks the
+           same), and that timing out is a REFUSAL rather than an approval. */
+        pb_consent c;
+        pb_consent_init(&c);
         uint32_t t0 = millis();
-        while (millis() - t0 < 5000) {
+        int verdict = PB_CONSENT_WAIT;
+        while (verdict == PB_CONSENT_WAIT) {
             soundTick();
-            if (millis() - t0 > 1600 && digitalRead(PIN_OK) == LOW) break;
+            verdict = pb_consent_step(&c, digitalRead(PIN_OK) == LOW,
+                                      (unsigned long)(millis() - t0),
+                                      PB_CONSENT_TIMEOUT_MS);
             delay(10);
         }
-        while (digitalRead(PIN_OK) == LOW) delay(10);   // wait for release
+        if (verdict != PB_CONSENT_ACCEPTED) return false;
+
+        /* Wait for the release before drawing the next page, or one long hold
+           would answer for both — and then the English page was never read. */
+        while (digitalRead(PIN_OK) == LOW) delay(10);
     }
+    return true;
 }
 
 /* ⚠ RUNS ON ITS OWN TASK so loop() is never blocked by the network. HTTPClient
@@ -1043,6 +1072,9 @@ static void helloTick()
        otherwise POST every pass of loop() forever — the exact runaway this
        ordering exists to make unrepresentable. */
     if (helloDone) return;
+    /* ⚠ THE GATE. Without this the consent screen is decoration: the payload
+       would go out whether or not anyone answered. */
+    if (!helloConsented) return;
     if (WiFi.status() != WL_CONNECTED) return;
     if (millis() < helloEarliest) return;
     helloDone = true;
@@ -1155,8 +1187,15 @@ void setup()
        version, so a change to what is sent re-opens the question rather than
        inheriting an answer given about a different message. */
     if (pb_hello_needs_disclosure(prefs.getInt("hello_ok", 0))) {
-        helloDisclose();
-        prefs.putInt("hello_ok", PB_HELLO_PAYLOAD_VERSION);
+        /* ⚠ THE FLAG IS WRITTEN ONLY IF SOMEBODY PRESSED. A timeout leaves it
+           untouched, so the question is asked again next boot rather than
+           silently treated as answered. */
+        helloConsented = helloDisclose();
+        if (helloConsented) prefs.putInt("hello_ok", PB_HELLO_PAYLOAD_VERSION);
+        else Serial.println("hello: no consent given — nothing will be sent");
+    } else {
+        /* Consent already on record for THIS payload version. */
+        helloConsented = true;
     }
     /* A short grace period so the first POST does not race WiFi association
        and burn this boot's single attempt on a stack that was not ready. */

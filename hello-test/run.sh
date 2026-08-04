@@ -140,6 +140,28 @@ grep -qE '#define[[:space:]]+PB_HELLO_KEY' "$INO" \
   && die "PB_HELLO_KEY is defined in the sketch — it belongs in gitignored secrets.h"
 grn "   the key is not hard-coded in a tracked file"
 
+# ⚠ CONSENT MUST GATE THE SEND, OR THE SCREEN IS DECORATION. This is the exact
+#   shape of the helloTick()-was-never-called bug: the disclosure can be perfect,
+#   the press can be detected perfectly, and the payload still goes out
+#   regardless — with nothing anywhere reporting a fault.
+grep -q 'if (!helloConsented) return;' "$INO" \
+  || die "helloTick() does not check consent — the payload would send unasked"
+grn "   nothing is sent unless consent was given"
+
+# ⚠ AND THE FLAG MUST NOT BE WRITTEN UNCONDITIONALLY. Writing it after a timeout
+#   would record "answered" for a question nobody heard, and the board would
+#   never ask again.
+grep -q 'if (helloConsented) prefs.putInt("hello_ok"' "$INO" \
+  || die "hello_ok is written without checking consent — a timeout would count as yes"
+grn "   a timeout does not record consent"
+
+# ⚠ THE TIMER MUST BE GONE. The old auto-advance is the defect itself; if it
+#   comes back the press becomes optional again and every test above still passes.
+if grep -qE 'millis\(\) - t0 < 5000' "$INO"; then
+  die "the 5s auto-advance is back in the disclosure — consent must be a press"
+fi
+grn "   the disclosure has no auto-advance"
+
 echo
 echo "== 4b. THE DISCLOSURE FITS THE PANEL =="
 # ⚠ centreFit has no font below 9pt, so an over-wide body line CLIPS rather
@@ -185,6 +207,17 @@ check_red "R4 oversized payload truncates instead of refusing" cap \
   's/if (need + 1 > outCap) return 0;/if (0) return 0;/'
 check_red "R5 consent never re-asked after a payload change" con \
   's/return storedConsentVersion < PB_HELLO_PAYLOAD_VERSION;/return 0;/'
+# ⚠ The release-edge requirement is the whole defence against a strapping pin
+#   held low at boot, and against a shorted button. Drop it and a board nobody
+#   touched answers for the person who was supposed to.
+check_red "R5b a held button counts as consent (no release edge)"          edge \
+  's/else if (c->seen_release) c->acked = 1;/else c->acked = 1;/'
+check_red "R5c a timeout is treated as consent"                            tmo \
+  's/if (elapsed_ms >= timeout_ms) return PB_CONSENT_TIMEOUT;/if (elapsed_ms >= timeout_ms) return PB_CONSENT_ACCEPTED;/'
+# ⚠ A press landing on the same sample as the deadline belongs to a person who
+#   pressed the button. Losing it to a clock is the rudest way to fail.
+check_red "R5d a press on the deadline loses the race to the clock"        race \
+  's/if (c->acked) return PB_CONSENT_ACCEPTED;/if (c->acked \&\& elapsed_ms < timeout_ms) return PB_CONSENT_ACCEPTED;/'
 
 # ── the signature. Mutations go into pbhmac.h and pb-hmac.c must notice.
 hmac_red() {

@@ -14,10 +14,19 @@
  * GFXfont — and it reads the strings from pbhello.h, the same header the sketch
  * includes, so the two cannot drift.
  *
- * ⚠ It measures WIDTH ONLY. It cannot tell you the screen reads well, that the
- * lines do not overlap visually, or that the contrast works. The camera check
- * still has to happen; this just means the camera is not the FIRST thing to
- * notice a clipped line.
+ * ⚠ IT USED TO MEASURE WIDTH ONLY, and that gap shipped. On 2026-08-04 a photo
+ * of the real panel showed the descender of "para desligar:" colliding with the
+ * line beneath it — on the kill-switch instruction, the one sentence that has to
+ * stay readable. Every width check was green. The vertical model below exists
+ * because of that frame.
+ *
+ * ⚠ The overlap depends on WHICH GLYPHS A LINE CONTAINS, not on the font's
+ * nominal height: "para desligar:" has p/g descenders and "PB_PHONE_HOME 0" is
+ * all-caps with none. A check against yAdvance alone would have passed this.
+ *
+ * ⚠ It still cannot tell you the screen READS well, or that the contrast works.
+ * The camera check still has to happen; this just means the camera is not the
+ * first thing to notice a clipped or colliding line.
  */
 
 #include <stdio.h>
@@ -99,12 +108,91 @@ static void page(const char *name, const char *const *lines)
     printf("\n");
 }
 
+/* glyph_ab, exactly as TFT_eSPI::setFreeFont() computes it: the largest ascent
+   above the baseline across the whole font. */
+static int font_ascent(const GFXfont *f)
+{
+    int ab = 0;
+    for (int c = f->first; c <= (int)f->last; c++) {
+        int a = -f->glyph[c - f->first].yOffset;
+        if (a > ab) ab = a;
+    }
+    return ab;
+}
+
+/* Ink extents RELATIVE TO THE BASELINE, over the glyphs this string uses.
+   ink_top is negative (above the baseline); ink_bottom is positive for
+   descenders and can be negative for an all-caps string. */
+static int ink_top(const GFXfont *f, const char *s)
+{
+    int top = 0, seen = 0;
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        if (*p < f->first || *p > f->last) continue;
+        int t = f->glyph[*p - f->first].yOffset;
+        if (!seen || t < top) { top = t; seen = 1; }
+    }
+    return top;
+}
+
+static int ink_bottom(const GFXfont *f, const char *s)
+{
+    int bot = 0, seen = 0;
+    for (const unsigned char *p = (const unsigned char *)s; *p; p++) {
+        if (*p < f->first || *p > f->last) continue;
+        const GFXglyph *g = &f->glyph[*p - f->first];
+        int b = g->yOffset + g->height;
+        if (!seen || b > bot) { bot = b; seen = 1; }
+    }
+    return bot;
+}
+
 int main(void)
 {
     printf("panel is 240px wide; centreFit receives W-8 = %dpx\n\n", MAXW);
 
     page("PORTUGUESE", PB_HELLO_PT);
     page("ENGLISH",    PB_HELLO_EN);
+
+    /* ── vertical: do consecutive lines actually collide? ──────────────────
+       TFT_eSPI puts a FreeFont BASELINE at y + glyph_ab, where glyph_ab is the
+       font-wide max ascent it computes in setFreeFont(). A string's real ink
+       therefore spans [baseline + min yOffset, baseline + max(yOffset+height)]
+       over the glyphs IT ACTUALLY CONTAINS. */
+    {
+        int ab = font_ascent(&FreeSans9pt7b);
+        int worst = -9999;   /* most-positive overlap; negative = clearance */
+        const char *worst_a = NULL, *worst_b = NULL;
+
+        for (int i = 1; i + 1 < PB_HELLO_LINES; i++) {
+            for (int lang = 0; lang < 2; lang++) {
+                const char *const *page = lang ? PB_HELLO_EN : PB_HELLO_PT;
+                int y_a = 26 + (i - 1) * 17;
+                int y_b = 26 + (i)     * 17;
+                int bottom_a = y_a + ab + ink_bottom(&FreeSans9pt7b, page[i]);
+                int top_b    = y_b + ab + ink_top(&FreeSans9pt7b, page[i + 1]);
+                int overlap  = bottom_a - top_b;
+                if (overlap > worst) { worst = overlap; worst_a = page[i]; worst_b = page[i + 1]; }
+            }
+        }
+        if (worst > 0) {
+            printf("\n  \033[31mVERTICAL COLLISION\033[0m: %dpx — \"%s\" runs into \"%s\"\n",
+                   worst, worst_a, worst_b);
+            fails++;
+        } else {
+            /* ⚠ PRINT THE CLOSEST APPROACH EVERY RUN, not just a pass.
+               At the current 17px pitch this reads 0px: the tightest pair is
+               ONE PIXEL from touching. Unlike the width check there is no slack
+               floor to enforce — the last line already ends at y=133 of 135, so
+               there is nowhere to take the margin from. A number nobody can see
+               is a margin nobody can defend, so it is printed instead. */
+            printf("\nvertical: no collision; closest approach %dpx"
+                   " (\"%s\" over \"%s\")\n",
+                   -worst, worst_a ? worst_a : "-", worst_b ? worst_b : "-");
+            if (-worst <= 2)
+                printf("          \033[33m⚠ zero-to-2px is one word-edit from"
+                       " colliding, and no test below this one would see it\033[0m\n");
+        }
+    }
 
     /* Vertical budget: title at y=4, body lines from y=26 at 17px pitch. */
     int last_bottom = 26 + (PB_HELLO_LINES - 2) * 17 + FreeSans9pt7b.yAdvance;
