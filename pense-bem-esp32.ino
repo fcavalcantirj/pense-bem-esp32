@@ -61,6 +61,7 @@
 #include "pensebem.h"
 #include "pbgame.h"
 #include "pbhello.h"
+#include "pbhmac.h"
 
 /* ⚠ TYPES MUST BE DECLARED BEFORE ANY FUNCTION THAT USES THEM, up here next to
    the includes. The Arduino build auto-generates prototypes for every function
@@ -952,6 +953,7 @@ static void wifiTick()
 
 static char     helloUuid[PB_HELLO_UUID_LEN] = "";
 static char     helloBody[PB_HELLO_MAX_PAYLOAD] = "";
+static char     helloSign[PB_HMAC_HEX_LEN] = "";
 static bool     helloDone     = false;   // one attempt per boot, win or lose
 static uint32_t helloEarliest = 0;
 
@@ -1018,6 +1020,13 @@ static void helloTask(void *)
     String url = String("http://") + PB_API_HOST + "/hello";
     if (http.begin(url)) {
         http.addHeader("Content-Type", "application/json");
+        /* ⚠ HYPHENS IN THE HEADER NAME, NEVER UNDERSCORES: nginx drops headers
+           containing underscores by default, so the signature would vanish
+           between here and the counter and every board would read unsigned with
+           nothing anywhere reporting a problem.
+           ⚠ Sent only if it was computed. An empty key is not an error — that
+           board is counted, just not as signed. */
+        if (helloSign[0] != '\0') http.addHeader("X-PB-Sign", helloSign);
         int code = http.POST((uint8_t *)helloBody, strlen(helloBody));
         Serial.printf("hello: POST %s -> %d\n", url.c_str(), code);
         http.end();
@@ -1054,6 +1063,20 @@ static void helloTick()
         Serial.println("hello: payload would not fit — sending nothing");
         return;
     }
+
+    /* ⚠ SIGN THE EXACT BYTES THAT WILL BE SENT, not the fields they came from.
+       Signing a re-serialised form means both ends must agree on that
+       serialisation forever, and the day they drift every board in the world
+       silently reads unsigned. This signs helloBody, and helloBody is what
+       http.POST() puts on the wire — there is no second copy to diverge from.
+
+       ⚠ THIS IS NOT A LOCK AND MUST NEVER BE DESCRIBED AS ONE. This firmware is
+       public so strangers can build boards, and the counter's gate counts THEIR
+       boards; a key a stranger's build needs is a key anyone can obtain. It
+       raises forging from one curl to reading the source. See pbhmac.h. */
+    pb_hmac_hex((const uint8_t *)PB_HELLO_KEY, strlen(PB_HELLO_KEY),
+                (const uint8_t *)helloBody, strlen(helloBody),
+                helloSign, sizeof helloSign);
     /* ⚠ 16 KB, not 8: HTTPClient + WiFiClient + the TCP buffers live on THIS
        task's stack, and an overflow is a panic-reboot, not a failed request. */
     xTaskCreate(helloTask, "hello", 16384, NULL, 1, NULL);

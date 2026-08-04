@@ -33,8 +33,16 @@
 #include <stddef.h>
 
 /* The payload shape this firmware sends. BUMP THIS whenever the payload gains
-   or changes a field, and every board will re-disclose before sending again. */
-#define PB_HELLO_PAYLOAD_VERSION 1
+   or changes a field, and every board will re-disclose before sending again.
+
+   v2 (2026-08-04) — the request gained an X-PB-Sign header: HMAC-SHA256 of the
+   body under a shared key, so the counter can tell a real build from a curl.
+   ⚠ BUMPED EVEN THOUGH THE SIGNATURE REVEALS NOTHING NEW — it is a function of
+   the two fields already disclosed, and carries no further fact about the
+   device or its owner. It is bumped anyway because the rule is "the payload
+   changed", not "I judged the change harmless", and a consent mechanism whose
+   trigger is somebody's judgement is not a mechanism. */
+#define PB_HELLO_PAYLOAD_VERSION 2
 
 /* 36 characters plus a terminator. */
 #define PB_HELLO_UUID_LEN 37
@@ -187,8 +195,8 @@ static inline size_t pb_hello_payload(const char *uuid, const char *version,
 
 static const char *const PB_HELLO_PT[PB_HELLO_LINES] = {
     "AVISA UMA VEZ",
-    "manda um numero",
-    "aleatorio + a versao",
+    "numero aleatorio, versao",
+    "e uma assinatura",
     "nada mais, sem cripto",
     "api.pense-bem-wars.com",
     "para desligar:",
@@ -197,13 +205,19 @@ static const char *const PB_HELLO_PT[PB_HELLO_LINES] = {
 
 static const char *const PB_HELLO_EN[PB_HELLO_LINES] = {
     "SAYS HELLO",
-    "sends a random number",
-    "and the version",
+    "sends a random number,",
+    "the version and a signature",
     "nothing else, not encrypted",
     "api.pense-bem-wars.com",
     "to turn it off:",
     "PB_PHONE_HOME 0",
 };
+
+/* ⚠ "sem cripto" / "not encrypted" IS STILL TRUE AND MUST STAY TRUE. A
+   signature authenticates; it does not encrypt. The body still crosses the
+   network in plain text, readable by anyone on the path, exactly as before —
+   so the line that says so is not weakened by the line above it. If this ever
+   becomes HTTPS, change that line in the same commit. */
 
 /* pb_hello_needs_disclosure decides whether the board must show the notice
  * before sending. Stored consent below the current payload version does not

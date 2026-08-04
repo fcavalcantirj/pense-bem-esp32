@@ -39,8 +39,18 @@ echo "== 1. PURITY =="
 code_only() { sed -e 's,//.*,,' -e '/^[[:space:]]*\*/d' -e '/^[[:space:]]*\/\*/d' "$1"; }
 for banned in '<Arduino.h>' 'String ' 'Serial\.' 'millis(' 'WiFi' 'HTTPClient' 'malloc(' 'float ' 'double '; do
   code_only "$HDR" | grep -q -- "$banned" && die "pbhello.h must stay Arduino-free; found: $banned"
+  # ⚠ pbhmac.h is held to the same rule for the same reason: the host suite has
+  #   to compile the SAME file the board runs. A mirror is not a test.
+  code_only ../pbhmac.h | grep -q -- "$banned" && die "pbhmac.h must stay Arduino-free; found: $banned"
 done
-grn "   pbhello.h is dependency-free"
+# ⚠ `unsigned long` IS BANNED OUTRIGHT IN pbhmac.h, and this is a scar, not
+#   taste: it is 64-bit on the Mac and 32-bit on the ESP32. SHA-256 is defined on
+#   exact 32-bit words, so that one type would make the host suite green while
+#   the board computed a different digest — which is precisely the bug this
+#   project already shipped once, in the game formula.
+code_only ../pbhmac.h | grep -qE 'unsigned long|unsigned int |[^_a-z]long ' \
+  && die "pbhmac.h uses a width-varying integer type; use uint32_t/uint64_t"
+grn "   pbhello.h and pbhmac.h are dependency-free, fixed-width only"
 
 echo
 echo "== 2. COMPILE (-Werror, C99) =="
@@ -108,6 +118,28 @@ if grep -nE 'TEMP:|XXX:|FIXME|prefs\.remove\("hello_ok"\)|PB_DEBUG' "$INO"; then
 fi
 grn "   no temporary or debug lines in the sketch"
 
+# ⚠ SAME CLASS AS helloTick(): the signature can be computed perfectly and never
+#   attached, or attached and never computed. Either way every board reads
+#   unsigned, nothing errors, and the only symptom is a number on a server.
+grep -q 'pb_hmac_hex(' "$INO" \
+  || die "the payload is never signed — pb_hmac_hex() is not called in the sketch"
+grn "   the payload is signed before it is sent"
+
+grep -q 'addHeader("X-PB-Sign"' "$INO" \
+  || die "the signature is computed but never sent — no X-PB-Sign header is added"
+grn "   the signature is attached to the request"
+
+# ⚠ HYPHENS, NOT UNDERSCORES. nginx drops headers containing underscores by
+#   default, so X_PB_Sign would vanish in transit with nothing reporting it.
+grep -q 'X_PB_Sign' "$INO" \
+  && die "the header name uses underscores; nginx silently drops those"
+grn "   the header name cannot be dropped by nginx"
+
+# The key must come from secrets.h, never be typed into a tracked file.
+grep -qE '#define[[:space:]]+PB_HELLO_KEY' "$INO" \
+  && die "PB_HELLO_KEY is defined in the sketch — it belongs in gitignored secrets.h"
+grn "   the key is not hard-coded in a tracked file"
+
 echo
 echo "== 4b. THE DISCLOSURE FITS THE PANEL =="
 # ⚠ centreFit has no font below 9pt, so an over-wide body line CLIPS rather
@@ -127,6 +159,15 @@ else
 fi
 
 echo
+echo "== 4c. THE SIGNATURE MATCHES PUBLISHED VECTORS =="
+# ⚠ Checked against RFC 4231 and NIST constants, NOT against itself. The Go
+#   server is checked against the same numbers, so the two ends agreeing is
+#   evidence; two implementations by the same author agreeing would not be.
+$CC -std=c99 -O0 -Wall -Wextra -Werror -o ./pb-hmac-test pb-hmac.c || die "pb-hmac.c did not compile"
+./pb-hmac-test || die "HMAC-SHA256 does not match the published test vectors"
+grn "   every SHA-256 and HMAC vector matched"
+
+echo
 echo "== 5. RED CONTROLS — each mutation must make the suite FAIL =="
 check_red() {
   local label="$1" name="$2" expr="$3"
@@ -144,6 +185,36 @@ check_red "R4 oversized payload truncates instead of refusing" cap \
   's/if (need + 1 > outCap) return 0;/if (0) return 0;/'
 check_red "R5 consent never re-asked after a payload change" con \
   's/return storedConsentVersion < PB_HELLO_PAYLOAD_VERSION;/return 0;/'
+
+# ── the signature. Mutations go into pbhmac.h and pb-hmac.c must notice.
+hmac_red() {
+  local label="$1" name="$2" expr="$3"
+  local dir="$work/$name"
+  mkdir -p "$dir/hello-test"
+  sed "$expr" ../pbhmac.h > "$dir/pbhmac.h"
+  cmp -s ../pbhmac.h "$dir/pbhmac.h" && die "mutation \'$name\' DID NOT APPLY"
+  cp pb-hmac.c "$dir/hello-test/pb-hmac.c"
+  ( cd "$dir/hello-test" && $CC -std=c99 -O0 -w -o t pb-hmac.c ) \
+    || die "mutant \'$name\' did not compile — that is not a proof either"
+  "$dir/hello-test/t" >/dev/null 2>&1 && die "$label: the vectors still matched under a real change"
+  red "   $label"
+}
+hmac_red "R6 HMAC inner pad constant wrong (0x36)" ipad \
+  's/\^ 0x36u/^ 0x37u/'
+hmac_red "R7 HMAC outer pad constant wrong (0x5c)" opad \
+  's/\^ 0x5cu/^ 0x5du/'
+hmac_red "R8 over-long key truncated instead of hashed" longkey \
+  's/if (keylen > PB_SHA256_BLOCK) {/if (0) {/'
+hmac_red "R9 SHA-256 second padding block skipped" pad2 \
+  's/if (i > 56) {/if (0) {/'
+hmac_red "R10 digest emitted uppercase" case \
+  's/"0123456789abcdef"/"0123456789ABCDEF"/'
+
+echo
+echo "      ⚠ R8 and R10 are the two that would ship silently. Our key is short,"
+echo "        so the over-long branch is never taken in the field; and the server"
+echo "        compares the header as TEXT, so uppercase hex is simply rejected."
+echo "        Both would leave every board unsigned with nothing reporting a fault."
 
 echo
 echo "      ⚠ R5 is the one that hides best. Every other mutation breaks a value"

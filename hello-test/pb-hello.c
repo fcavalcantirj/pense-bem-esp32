@@ -181,15 +181,25 @@ int main(void)
     }
 
     /* ---- 7. consent is scoped to the payload version --------------------
-       ⚠ LITERALS, DELIBERATELY. If PB_HELLO_PAYLOAD_VERSION is bumped to 2,
-       the second assertion below goes RED — and that is the intended design,
-       not a brittle test. Changing what the board sends must force whoever
-       changed it to look at the disclosure that promised otherwise. */
+       ⚠ LITERALS, DELIBERATELY. If PB_HELLO_PAYLOAD_VERSION is bumped, the
+       assertions below go RED — and that is the intended design, not a brittle
+       test. Changing what the board sends must force whoever changed it to look
+       at the disclosure that promised otherwise.
+
+       ⚠ AND IT FIRED FOR REAL ON 2026-08-04. v2 added an X-PB-Sign header, this
+       stage went red on the next run, and the disclosure was rewritten in both
+       languages before it went green again — including re-measuring every line
+       against the panel, which caught one at +2px of margin. Recorded here
+       because a guard that has actually caught something is worth more than one
+       that has only ever been argued for, and because the next person to bump
+       this will want to know the procedure rather than rediscover it. */
     {
         eq_int("first boot (nothing stored) must disclose",
                pb_hello_needs_disclosure(0), 1);
-        eq_int("consent given for payload v1 covers v1",
-               pb_hello_needs_disclosure(1), 0);
+        eq_int("consent given for payload v1 does NOT cover v2",
+               pb_hello_needs_disclosure(1), 1);
+        eq_int("consent given for payload v2 covers v2",
+               pb_hello_needs_disclosure(2), 0);
         eq_int("consent from an older payload does NOT carry forward",
                pb_hello_needs_disclosure(-1), 1);
     }
