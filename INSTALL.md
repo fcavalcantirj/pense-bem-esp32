@@ -112,7 +112,7 @@ You should see roughly:
 ALL SEVEN STAGES PASSED.      <- formula proven
 ALL STAGES PASSED.            <- game rules proven
 build stamp: a1b2c3d
-Sketch uses 1189446 bytes (90%) of program storage space.
+Sketch uses 1189478 bytes (60%) of program storage space.
 ```
 
 After the first flash, updates go over the air:

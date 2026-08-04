@@ -14,7 +14,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-FQBN="esp32:esp32:esp32"
+# ⚠ min_spiffs, NOT the default scheme, and this is launch-critical.
+#   The default gives the app 1.25 MB and spends 1.5 MB on a SPIFFS partition
+#   this firmware never opens — leaving 118 KB free at 90.7 % full, which is not
+#   room for any multiplayer code whatever radio wins. min_spiffs gives the app
+#   1.88 MB and KEEPS OTA.
+#
+#   ⚠⚠ A PARTITION CHANGE CANNOT BE DELIVERED OVER OTA. The table lives at
+#   0x8000 and OTA only rewrites app slots, so every board that already exists
+#   needs one flash over USB to receive it. That is why it happens before the
+#   project is published rather than after: today it is one board, later it is
+#   everyone who built one.
+FQBN="esp32:esp32:esp32:PartitionScheme=min_spiffs"
 PINNED="3.3.10"
 
 # ⚠ THE CORE IS PINNED AND THIS REFUSES TO BUILD OTHERWISE. A bare
@@ -50,7 +61,7 @@ echo
 #   real binary was 90 %. Someone following INSTALL.md would see a correct build
 #   and conclude it was broken. A number quoted in four files and verified in
 #   none is a number that is wrong somewhere.
-PB_FLASH_PCT=90
+PB_FLASH_PCT=60
 out=$(arduino-cli compile --fqbn "$FQBN" . 2>&1) || { echo "$out"; exit 1; }
 echo "$out"
 # ⚠ ONE substitution. An earlier version blanked the line with a leading

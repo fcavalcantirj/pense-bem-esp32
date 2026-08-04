@@ -233,8 +233,8 @@ ESP32 plus a separate display for a project like this.
 
 - **`Com Versão Shell` / "with shell"** — the board plus a moulded case. Worth it
   if this is going to be handled by a child, which is the whole point of the toy.
-- **`4MB` vs `16MB CH9102F`** — either works. The firmware is **~1.19 MB, 90 % of
-  the default 1.31 MB app partition**, which is the same on both. 16 MB only buys
+- **`4MB` vs `16MB CH9102F`** — either works. The firmware is **~1.19 MB, 60 % of
+  the 1.97 MB app partition (`min_spiffs`)**, which is the same on both. 16 MB only buys
   you headroom for a larger partition scheme later.
 
 ⚠ **Get the V1.1, not the T-Display-S3.** They look alike and are *not*
@@ -273,7 +273,7 @@ cp secrets.h.example secrets.h              # gitignored; WiFi is OTA-only
 ```
 
 `build.sh` **refuses to compile** unless the ESP32 core is pinned at `3.3.10`,
-and runs both host test suites before it builds anything. ~90 % flash, 23 % RAM.
+and runs both host test suites before it builds anything. ~60 % flash, 23 % RAM.
 
 ⚠ **WiFi exists for OTA reflashing and nothing else.** No game path reads the
 network — the answer is arithmetic, and the toy behaves identically with the
