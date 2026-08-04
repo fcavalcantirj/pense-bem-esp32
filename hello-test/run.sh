@@ -162,6 +162,16 @@ if grep -qE 'millis\(\) - t0 < 5000' "$INO"; then
 fi
 grn "   the disclosure has no auto-advance"
 
+# ⚠ BOTH LANGUAGES MUST BE DRAWN UNCONDITIONALLY. An early return inside the
+#   page loop means a reader who does not press during the FIRST language never
+#   sees the second — and the second exists for exactly the person who cannot
+#   read the first. This shipped for about twenty minutes and was caught on
+#   hardware, not by any test, which is why it is now a grep.
+if sed -n '/^static bool helloDisclose/,/^}/p' "$INO" | grep -qE 'return (false|0);'; then
+  die "helloDisclose() returns early — a timeout on page 1 would skip the other language"
+fi
+grn "   both languages are always displayed, press or not"
+
 echo
 echo "== 4b. THE DISCLOSURE FITS THE PANEL =="
 # ⚠ centreFit has no font below 9pt, so an over-wide body line CLIPS rather

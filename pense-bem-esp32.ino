@@ -963,7 +963,11 @@ static bool     helloConsented = false;
 /* How long a page waits for a press before giving up. Generous, because the
    cost of waiting is a delayed game and the cost of giving up early is a person
    who wanted to consent and was not given the chance. */
-static const uint32_t PB_CONSENT_TIMEOUT_MS = 30000;
+/* ⚠ 45s, NOT 30. Measured on a real person: Felipe hit the 30s timeout while
+   reading one message. The timeout exists ONLY so a board with a broken button
+   cannot hang forever — it is not a patience test, and a notice nobody had time
+   to read is the same as no notice. */
+static const uint32_t PB_CONSENT_TIMEOUT_MS = 45000;
 static uint32_t helloEarliest = 0;
 
 /* The disclosure, shown once per payload version, BEFORE anything is sent.
@@ -990,7 +994,18 @@ static bool helloDisclose()
        that someone typed them twice — and three of these lines DID clip before
        the measurement existed, including "how to turn it off" in both
        languages. Never inline them. */
+    /* ⚠ BOTH PAGES ARE ALWAYS DRAWN. THERE IS NO EARLY RETURN, AND THAT IS THE
+       WHOLE POINT OF THE SHAPE OF THIS LOOP.
+       The first version of this fix bailed out on a timeout — so a person who
+       did not press during the PORTUGUESE page never saw the ENGLISH one, and
+       the English page exists precisely for the reader who cannot read the
+       first. That regressed the rule stated at the top of pbhello.h: a notice
+       in a language the reader does not read is not a notice. Observed on real
+       hardware within minutes: PT shown, no press, straight to the game, the
+       English page never drawn.
+       Displaying is unconditional; only CONSENT depends on a press. */
     const char *const *page[2] = { PB_HELLO_PT, PB_HELLO_EN };
+    bool accepted = false;
 
     for (int p = 0; p < 2; p++) {
         tft.fillScreen(C_BG);
@@ -1025,13 +1040,17 @@ static bool helloDisclose()
                                       PB_CONSENT_TIMEOUT_MS);
             delay(10);
         }
-        if (verdict != PB_CONSENT_ACCEPTED) return false;
+        /* ⚠ THE LAST PAGE DECIDES. Consent is the answer given after everything
+           has been shown, so a press on the Portuguese page advances the screen
+           but does not by itself consent — the English page still has to be
+           displayed and answered. */
+        accepted = (verdict == PB_CONSENT_ACCEPTED);
 
         /* Wait for the release before drawing the next page, or one long hold
            would answer for both — and then the English page was never read. */
-        while (digitalRead(PIN_OK) == LOW) delay(10);
+        if (accepted) while (digitalRead(PIN_OK) == LOW) delay(10);
     }
-    return true;
+    return accepted;
 }
 
 /* ⚠ RUNS ON ITS OWN TASK so loop() is never blocked by the network. HTTPClient
