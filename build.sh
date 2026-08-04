@@ -43,7 +43,28 @@ echo
 bash hello-test/run.sh
 echo
 
-arduino-cli compile --fqbn "$FQBN" .
+# ⚠ THE DOCUMENTED FLASH FIGURE IS CHECKED AGAINST THE REAL ONE.
+#   For weeks the public record said three different things — README "79 %",
+#   this repo's INSTALL.md printing "1047974 bytes (79%)" as output a builder is
+#   told to COMPARE AGAINST, and the counter's nginx conf "~80%" — while the
+#   real binary was 90 %. Someone following INSTALL.md would see a correct build
+#   and conclude it was broken. A number quoted in four files and verified in
+#   none is a number that is wrong somewhere.
+PB_FLASH_PCT=90
+out=$(arduino-cli compile --fqbn "$FQBN" . 2>&1) || { echo "$out"; exit 1; }
+echo "$out"
+# ⚠ ONE substitution. An earlier version blanked the line with a leading
+#   s/.*of program storage space.*// and then tried to match the emptied line, so
+#   $pct came back empty and the `-n "$pct"` test skipped the check entirely —
+#   a guard that passed by not running. The red control below is what caught it.
+pct=$(printf '%s' "$out" | sed -n 's/^Sketch uses [0-9]* bytes (\([0-9]*\)%).*/\1/p' | head -1)
+[ -n "$pct" ] || { echo "⚠ could not read the flash percentage from the compiler output"; exit 1; }
+if [ "$pct" != "$PB_FLASH_PCT" ]; then
+  echo
+  echo "⚠ FLASH DRIFT: the build is ${pct}% but the docs say ${PB_FLASH_PCT}%."
+  echo "  Update PB_FLASH_PCT here AND the figures in README.md and INSTALL.md."
+  exit 1
+fi
 
 case "${1:-}" in
   flash)

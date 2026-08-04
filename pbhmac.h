@@ -6,18 +6,26 @@
  * The board signs its one message so the counter can tell "a build that knows
  * the key" from "anything that can reach port 80". That is the whole job.
  *
- * It is NOT a lock and describing it as one would be the first lie. This
- * firmware is public so strangers can build boards, and the counter's gate
- * counts THEIR boards — so the key has to be obtainable by a stranger, which
- * means it is obtainable by anyone. There is no design that escapes that, and
+ * It is NOT a lock and describing it as one would be the first lie. The key is
+ * NOT published — it lives in this repo's gitignored secrets.h — so a stranger
+ * who clones and builds has no key and their board reports UNSIGNED. It is still
+ * counted; nothing is refused. The honest consequence is that `signed` counts
+ * boards the author flashed and cannot tell a real stranger from a forgery.
+ *
+ * ⚠ Publishing the key would fix that and break something else: it would then be
+ * a secret an attacker also holds, which is no secret. There is no arrangement
+ * where public firmware keeps one. That is information theory, and
  * there is no hardware escape on this board either: the only device-unique
  * value on a classic ESP32 is the factory eFuse base MAC, which is broadcast in
  * every WiFi frame and so identifies without authenticating. (The eFuse-backed
  * HMAC peripheral that would give a real root of trust does not exist on this
  * silicon — it starts at the S2/S3/C3.)
  *
- * What it buys is a cost increase: forging a signed board goes from one curl to
- * reading this repo and implementing HMAC. Worth it, and worth saying plainly.
+ * What it buys, precisely: `signed` is a number a drive-by cannot move, sitting
+ * beside `boards`, which anyone can. It marks the author's own boards and nothing
+ * more. The number that says something about STRANGERS is the build stamp — see
+ * the counter's builds.go — because `git describe` produced it on a real build
+ * and a forger had to decide to type something.
  *
  * ⚠ WHY NOT mbedtls, WHICH IS ALREADY LINKED. Two reasons, and the second is
  * the real one. It would tie this file to an Arduino/ESP-IDF header, so the
