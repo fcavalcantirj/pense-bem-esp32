@@ -85,7 +85,14 @@ case "${1:-}" in
     #   cable before the board — this wastes more time than any other mistake here.
     PORT=$(ls /dev/cu.usbserial* 2>/dev/null | head -1)
     [ -n "$PORT" ] || { echo "no /dev/cu.usbserial* port — cable?"; exit 1; }
-    arduino-cli upload -p "$PORT" --fqbn "${FQBN}:UploadSpeed=115200" .
+    # ⚠ COMMA, NOT COLON. An FQBN is vendor:arch:board followed by ONE colon and
+    #   then comma-separated options — so appending ":UploadSpeed=..." to an FQBN
+    #   that already carries :PartitionScheme=... produces a malformed FQBN and
+    #   arduino-cli refuses it. This worked for months because the FQBN had no
+    #   options; adding the partition scheme broke only THIS path, and only the
+    #   ota path was exercised afterwards. Changing a shared variable and testing
+    #   one consumer of it is how that lands.
+    arduino-cli upload -p "$PORT" --fqbn "${FQBN},UploadSpeed=115200" .
     ;;
   ota)
     # ⚠ `-l network` IS REQUIRED and the target must be the RESOLVED IP. Without
